@@ -11,7 +11,7 @@
 
 services:
   gateway:
-    image: starsdream666/temp-mail-gateway:v0.2.4
+    image: starsdream666/temp-mail-gateway:latest
     # 本地改代码后自建镜像时改用 build（需要代理见 Dockerfile 头部注释）
     # build:
     #   context: .

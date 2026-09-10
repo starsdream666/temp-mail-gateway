@@ -6,13 +6,13 @@
 # 构建工具链只存在于前两个阶段，不进最终镜像。
 #
 # 构建（本机需经代理访问 npm / GitHub prebuild）：
-#   docker build -t starsdream666/temp-mail-gateway:v0.2.4 \
+#   docker build -t starsdream666/temp-mail-gateway:latest \
 #     --build-arg HTTP_PROXY=http://host.docker.internal:7890 \
 #     --build-arg HTTPS_PROXY=http://host.docker.internal:7890 .
 #
 # 运行（MASTER_KEY / ADMIN_PASSWORD 必填，绝不烧进镜像）：
 #   docker run -d -p 127.0.0.1:8787:8787 -v tmg-data:/data \
-#     -e MASTER_KEY=... -e ADMIN_PASSWORD=... starsdream666/temp-mail-gateway:v0.2.4
+#     -e MASTER_KEY=... -e ADMIN_PASSWORD=... starsdream666/temp-mail-gateway:latest
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 

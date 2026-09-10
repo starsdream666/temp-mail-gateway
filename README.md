@@ -10,7 +10,7 @@
 
 ## 快速开始（Docker，推荐）
 
-镜像：[`starsdream666/temp-mail-gateway`](https://hub.docker.com/r/starsdream666/temp-mail-gateway)（`v0.2.4` / `latest`）
+镜像：[`starsdream666/temp-mail-gateway`](https://hub.docker.com/r/starsdream666/temp-mail-gateway)（默认使用 `latest`，每次 `main` 发布后更新；固定版本请使用镜像库中已发布的版本标签）
 
 
 
@@ -26,7 +26,7 @@ docker run -d --name temp-mail-gateway \
   -p 127.0.0.1:8787:8787 -v tmg-data:/data \
   -e MASTER_KEY=$(openssl rand -base64 32) \
   -e ADMIN_PASSWORD=your-strong-password \
-  starsdream666/temp-mail-gateway:v0.2.4
+  starsdream666/temp-mail-gateway:latest
 ```
 
 - 镜像**不含任何密钥**，`MASTER_KEY` / `ADMIN_PASSWORD` 运行时注入，缺失则启动即退出。
@@ -35,7 +35,7 @@ docker run -d --name temp-mail-gateway \
 - 自建镜像（需要代理时）：
 
   ```bash
-  docker build -t starsdream666/temp-mail-gateway:v0.2.4 \
+  docker build -t starsdream666/temp-mail-gateway:latest \
     --build-arg HTTP_PROXY=http://host.docker.internal:7890 \
     --build-arg HTTPS_PROXY=http://host.docker.internal:7890 .
   ```
@@ -57,7 +57,7 @@ Docker 用户名和镜像名已写入工作流的非敏感配置。令牌仅交�
 | 触发事件 | 行为 |
 |---|---|
 | 提交至 `main` | 测试、构建并发布 `latest`、`main`、`sha-<短提交号>` |
-| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布完整版本号、主次版本号、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
+| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布原始标签（如 `v0.2.4`）、完整版本号（`0.2.4`）、主次版本号（`0.2`）、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
 | 向 `main` 提交 PR | 测试、构建和冒烟验证，不登录 Docker Hub、不推送镜像 |
 | Actions 页面手动运行 | 默认只验证；在 `main` 或版本标签上勾选 `publish` 后才推送 |
 
