@@ -1,0 +1,10 @@
+# 复制为 .dev.vars（wrangler dev 使用，勿提交）
+MASTER_KEY=dev-only-master-key-change-me-0123456789abcdef
+ADMIN_PASSWORD=dev-admin-password
+ADMIN_CORS_ORIGIN=http://localhost:5173
+# 建箱限速（0 = 不限）
+# MAILBOXES_PER_KEY_PER_HOUR=60
+# 每 Key 默认并发请求上限（0 = 不限）；后台全局设置优先
+# MAX_CONCURRENT_REQUESTS_PER_KEY=0
+# Workers 端健康监控全局默认间隔（毫秒；scheduled cron 触发到期扫描，下限 60000）
+# HEALTH_CHECK_INTERVAL_MS=300000

@@ -1,0 +1,57 @@
+# temp-mail-gateway —— Docker Compose（个人自建形态）
+#
+# 首次使用：
+#   1. cp .env.example .env  并填写 MASTER_KEY（≥16 字符随机串）与 ADMIN_PASSWORD
+#      生成 MASTER_KEY：  openssl rand -base64 32
+#   2. docker compose up -d
+#   3. 打开 http://127.0.0.1:8787/ 登录管理后台，接入上游并同步域名
+#
+# 说明：镜像内不含任何密钥，MASTER_KEY / ADMIN_PASSWORD 由 env_file 在运行时注入；
+# 两者缺失时服务会直接退出（src/entries/node.ts 启动守卫）。
+
+services:
+  gateway:
+    image: starsdream666/temp-mail-gateway:v0.2.4
+    # 本地改代码后自建镜像时改用 build（需要代理见 Dockerfile 头部注释）
+    # build:
+    #   context: .
+    #   args:
+    #     HTTP_PROXY: http://host.docker.internal:7890
+    #     HTTPS_PROXY: http://host.docker.internal:7890
+    container_name: temp-mail-gateway
+    restart: unless-stopped
+
+    # 默认只绑回环：管理后台带登录密码，但仍不建议直接裸奔到公网。
+    # 需要对外提供服务时请放到反向代理（TLS + 访问控制）后面，再改成 "8787:8787"。
+    ports:
+      - "127.0.0.1:8787:8787"
+
+    env_file:
+      - .env
+    environment:
+      # 数据库落在数据卷内，容器重建不丢数据
+      DATABASE_PATH: /data/gateway.db
+      # 健康监控全局默认间隔（毫秒，下限 60000）；渠道可在状态监控页单独覆盖
+      # HEALTH_CHECK_INTERVAL_MS: "300000"
+      # 每个网关 key 每小时邮箱创建请求的默认上限，0 = 不限；后台可为单个 key 覆盖
+      # MAILBOXES_PER_KEY_PER_HOUR: "60"
+      # 每个 Key 默认并发请求上限（0 = 不限）；后台全局设置保存后覆盖上述默认值
+      # MAX_CONCURRENT_REQUESTS_PER_KEY: "0"
+      # 跨域部署管理后台时才需要（同源部署留空）；填 "*" 会关闭 cookie 凭证以防 CSRF
+      # ADMIN_CORS_ORIGIN: "https://admin.example.com"
+
+    volumes:
+      - tmg-data:/data
+
+    # 上游探测需要出网；如宿主机需代理才能访问上游/公网，取消下面两行注释
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  tmg-data:

@@ -1,0 +1,1 @@
+ALTER TABLE `api_keys` ADD `channels_json` text;

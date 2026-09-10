@@ -1,0 +1,41 @@
+{
+  "name": "temp-mail-gateway",
+  "version": "0.2.4",
+  "description": "临时邮箱聚合网关 — 统一 API + 上游透传，可部署到 Cloudflare Workers / Docker",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/entries/node.ts",
+    "start": "tsx src/entries/node.ts",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "docker:build": "docker build -t starsdream666/temp-mail-gateway:v0.2.4 -t starsdream666/temp-mail-gateway:latest --build-arg HTTP_PROXY=http://host.docker.internal:7890 --build-arg HTTPS_PROXY=http://host.docker.internal:7890 .",
+    "docker:push": "docker push starsdream666/temp-mail-gateway:v0.2.4 && docker push starsdream666/temp-mail-gateway:latest",
+    "deploy": "npm run frontend:build && wrangler deploy"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "@hono/swagger-ui": "^0.5.0",
+    "@hono/zod-openapi": "^1.0.0",
+    "better-sqlite3": "^12.2.0",
+    "drizzle-orm": "^0.44.0",
+    "hono": "^4.7.0",
+    "tsx": "^4.19.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260831.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0",
+    "wrangler": "^4.14.0"
+  },
+  "license": "MIT"
+}

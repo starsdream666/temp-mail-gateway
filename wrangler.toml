@@ -1,0 +1,38 @@
+# Cloudflare Workers 部署配置
+# 首次部署前：
+#   1. npx wrangler d1 create temp-mail-gateway   （把返回的 database_id 填到下面）
+#   2. npx wrangler d1 migrations apply DB --remote
+#   3. npx wrangler secret put MASTER_KEY
+#   4. npx wrangler secret put ADMIN_PASSWORD
+#   5. npm run deploy
+name = "temp-mail-gateway"
+main = "src/entries/worker.ts"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat"]
+
+# 管理后台 SPA：部署前先执行 npm run frontend:build 生成 frontend/dist。
+# assets 未命中（not_found_handling 默认 none）的请求进入 Worker，
+# 由 Worker 判断是 API 路径（返回 JSON 错误）还是 SPA 路由（回退 index.html）。
+[assets]
+directory = "./frontend/dist"
+binding = "ASSETS"
+
+# 健康监控定时任务：scheduled 处理函数按此 cron 到期扫描各渠道（间隔仍受
+# 渠道 settings.monitorIntervalMs / HEALTH_CHECK_INTERVAL_MS 控制）
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "temp-mail-gateway"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+# 非敏感默认配置放这里（如 MAILBOXES_PER_KEY_PER_HOUR、HEALTH_CHECK_INTERVAL_MS）；
+# 敏感项用 `wrangler secret put`：
+#   MASTER_KEY     — 32 字节以上随机串（AES-GCM 主密钥）
+#   ADMIN_PASSWORD — 管理后台登录密码
+#   ADMIN_CORS_ORIGIN — 可选，前端 SPA 的来源，如 https://admin.example.com；同域部署可不填
+#     ⚠️ 填 * 时网关不发送 Allow-Credentials（会话 cookie 保持 SameSite=Lax）；
+#     跨域管理后台必须写明确切来源

@@ -1,0 +1,42 @@
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Credentials and runtime data (examples are intentionally public)
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+
+# Local tools, caches and third-party reference checkouts
+.tmp/
+.wrangler/
+.reasonix/
+.codex/
+.agents/
+.vscode/
+.idea/
+floatmail/
+参考项目/
+
+# Local development history; public documentation lives in README/API/DESIGN
+CODE_REVIEW.md
+FLOATMAIL_INTEGRATION_PLAN.md
+FLOATMAIL_M1_STEPS.md
+WEB_FRONTEND_PROMPT.md
+
+*.log
+.DS_Store
+Thumbs.db

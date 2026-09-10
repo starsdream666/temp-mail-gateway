@@ -1,0 +1,56 @@
+# 构建上下文裁剪：只把运行时真正需要的东西送进 Docker daemon。
+# 尤其注意 .env / data/ 绝不能进镜像（会把本机密钥与数据库烧进镜像层）。
+
+# 依赖与构建产物（镜像内自行安装/构建，宿主机的是 win32 原生模块，进容器不可用）
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# 密钥与本地数据
+.env
+.dev.vars
+**/.env
+**/.env.*
+**/.dev.vars*
+**/*.pem
+**/*.key
+data/
+.tmp/
+
+# 版本控制与编辑器
+.git/
+.gitignore
+.reasonix/
+.vscode/
+.idea/
+
+# 文档与审查记录（不影响运行）
+*.md
+!THIRD_PARTY_NOTICES.md
+!frontend/index.html
+
+# 测试、脚本与参考资料
+test/
+# 只排根目录的开发脚本：frontend/scripts/ 是前端构建链的一部分
+# （Dockerfile 在容器内跑 npm run build → npm run clean），无前缀的 scripts/
+# 会连它一起排除，导致镜像构建失败。
+/scripts/
+参考项目/
+floatmail/
+vitest.config.ts
+
+# Cloudflare 侧配置（Node/Docker 形态用不到）
+wrangler.toml
+.wrangler/
+
+# Docker 自身
+Dockerfile
+docker-compose.yml
+.dockerignore
+.github/
+.gitattributes
+
+# 杂项
+*.log
+.DS_Store
