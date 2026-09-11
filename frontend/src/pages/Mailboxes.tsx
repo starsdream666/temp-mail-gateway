@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Mail,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
 import { Modal } from '../components/Modal';
 import {
   getMailboxes,
+  getGlobalSettings,
   getUpstreams,
   pruneExpiredMailboxes,
   importMailboxes,
@@ -38,6 +40,9 @@ export const Mailboxes: React.FC = () => {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [autoCleanupEnabled, setAutoCleanupEnabled] = useState(false);
+  const mailboxRequest = useRef(0);
+  const mailboxRequestPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
@@ -85,33 +90,65 @@ export const Mailboxes: React.FC = () => {
     };
   }, []);
 
-  // 加载邮箱列表
-  const loadMailboxes = useCallback(async () => {
+  // 后台刷新不闪烁；请求序号防止筛选/分页变化后旧响应覆盖新列表。
+  const loadMailboxes = useCallback(async (silent = false) => {
+    if (silent && mailboxRequestPending.current) return;
+    const request = ++mailboxRequest.current;
+    mailboxRequestPending.current = true;
+    if (!silent) { setLoading(true); setError(null); }
     try {
-      setLoading(true);
-      setError(null);
       const offset = (currentPage - 1) * PAGE_SIZE;
       const res = await getMailboxes({
         upstreamId: selectedUpstreamId || undefined,
         limit: PAGE_SIZE,
         offset,
       });
-      setMailboxes(res.mailboxes);
+      if (request !== mailboxRequest.current) return;
       setTotal(res.total);
+      setError(null);
+      const lastPage = Math.max(1, Math.ceil(res.total / PAGE_SIZE));
+      if (currentPage > lastPage) {
+        setCurrentPage(lastPage);
+        return;
+      }
+      setMailboxes(res.mailboxes);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('无法加载邮箱概览列表，请检查网络或后端状态');
+      if (request === mailboxRequest.current && !silent) {
+        setError(err instanceof ApiError ? err.message : '无法加载邮箱概览列表，请检查网络或后端状态');
       }
     } finally {
-      setLoading(false);
+      if (request === mailboxRequest.current) {
+        mailboxRequestPending.current = false;
+        setLoading(false);
+      }
     }
   }, [currentPage, selectedUpstreamId]);
 
   useEffect(() => {
-    loadMailboxes();
+    void loadMailboxes();
+    return () => { mailboxRequest.current += 1; mailboxRequestPending.current = false; };
   }, [loadMailboxes]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshSettings = () => {
+      void getGlobalSettings().then((settings) => {
+        if (active) setAutoCleanupEnabled(settings.mailboxCleanupEnabled);
+      }).catch(() => { /* 设置读取失败不阻断邮箱列表和手动刷新。 */ });
+    };
+    const onFocus = () => { refreshSettings(); void loadMailboxes(true); };
+    refreshSettings();
+    window.addEventListener('focus', onFocus);
+    return () => { active = false; window.removeEventListener('focus', onFocus); };
+  }, [loadMailboxes]);
+
+  useEffect(() => {
+    if (!autoCleanupEnabled) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadMailboxes(true);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [autoCleanupEnabled, loadMailboxes]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
 
@@ -223,6 +260,7 @@ export const Mailboxes: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">
             只读查看所有通过网关签发的临时邮箱。支持按上游服务筛选及分页检索。
           </p>
+          {autoCleanupEnabled && <p className="mt-1 text-xs text-slate-500">自动清理已开启，列表每 5 秒更新。<Link to="/settings" className="ml-1 text-indigo-600 hover:underline">管理清理设置</Link></p>}
         </div>
 
         {/* 筛选与刷新 */}
@@ -270,7 +308,7 @@ export const Mailboxes: React.FC = () => {
 
           <button
             type="button"
-            onClick={loadMailboxes}
+            onClick={() => void loadMailboxes()}
             title="刷新数据"
             className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl shadow-sm transition-colors"
           >

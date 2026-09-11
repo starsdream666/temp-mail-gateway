@@ -49,7 +49,7 @@ export const mailboxes = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
-  (t) => [index("mailboxes_upstream_idx").on(t.upstreamId), index("mailboxes_created_idx").on(t.createdAt)],
+  (t) => [index("mailboxes_upstream_idx").on(t.upstreamId), index("mailboxes_created_idx").on(t.createdAt), index("mailboxes_expires_idx").on(t.expiresAt)],
 );
 
 export const apiKeys = sqliteTable("api_keys", {
@@ -73,6 +73,11 @@ export const apiKeys = sqliteTable("api_keys", {
 
 export const globalSettings = sqliteTable("global_settings", {
   id: integer("id").primaryKey(),
+  mailboxCleanupEnabled: integer("mailbox_cleanup_enabled", { mode: "boolean" }),
+  mailboxCleanupImmediate: integer("mailbox_cleanup_immediate", { mode: "boolean" }),
+  mailboxCleanupIntervalMs: integer("mailbox_cleanup_interval_ms"),
+  /** 内部调度状态（毫秒），不开放给设置 API。 */
+  mailboxCleanupLastRunAt: integer("mailbox_cleanup_last_run_at"),
   adminPasswordHash: text("admin_password_hash"),
   healthCheckEnabled: integer("health_check_enabled", { mode: "boolean" }),
   healthCheckIntervalMs: integer("health_check_interval_ms"),

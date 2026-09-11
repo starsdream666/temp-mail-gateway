@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as s from "../../../db/schema";
@@ -22,6 +22,7 @@ import type {
   SettingsStore,
 } from "../../../ports/stores";
 import { StoreError } from "../../../ports/stores";
+import { DEFAULT_MAILBOX_CLEANUP_INTERVAL_MS } from "../../../core/settings";
 
 /**
  * D1 与 better-sqlite3 共用的 Drizzle Store 实现。
@@ -83,8 +84,14 @@ export function createDrizzleStores(
       return rows[0] ?? null;
     },
     async update(patch) {
+      const resetCleanup = patch.mailboxCleanupEnabled !== undefined
+        || patch.mailboxCleanupImmediate !== undefined
+        || patch.mailboxCleanupIntervalMs !== undefined;
       await db.insert(s.globalSettings).values({ id: 1, ...patch })
-        .onConflictDoUpdate({ target: s.globalSettings.id, set: patch });
+        .onConflictDoUpdate({
+          target: s.globalSettings.id,
+          set: { ...patch, ...(resetCleanup ? { mailboxCleanupLastRunAt: null } : {}) },
+        });
     },
   };
 
@@ -270,12 +277,58 @@ export function createDrizzleStores(
       await db.delete(s.mailboxes).where(eq(s.mailboxes.id, id));
     },
 
-    async deleteExpired(before) {
+    async deleteExpired(now) {
       const rows = await db
         .delete(s.mailboxes)
-        .where(lt(s.mailboxes.expiresAt, before))
+        .where(lte(s.mailboxes.expiresAt, now))
         .returning({ id: s.mailboxes.id });
       return rows.length;
+    },
+
+    async deleteExpiredAutomatically(now) {
+      const [settings] = await db.select().from(s.globalSettings).where(eq(s.globalSettings.id, 1));
+      if (!settings?.mailboxCleanupEnabled) return 0;
+      const nowMs = now.getTime();
+      const intervalMs = settings.mailboxCleanupIntervalMs ?? DEFAULT_MAILBOX_CLEANUP_INTERVAL_MS;
+      if (!settings.mailboxCleanupImmediate && settings.mailboxCleanupLastRunAt !== null
+        && nowMs - settings.mailboxCleanupLastRunAt < intervalMs) return 0;
+
+      // 即时模式没有过期记录时只读索引，避免每秒产生无意义的写入。
+      if (settings.mailboxCleanupImmediate) {
+        const expired = await db.select({ id: s.mailboxes.id }).from(s.mailboxes)
+          .where(lte(s.mailboxes.expiresAt, now)).limit(1);
+        if (expired.length === 0) return 0;
+      }
+
+      // 在删除语句内再次检查最新开关和时间；多个进程 / Workers isolate 不能绕过间隔。
+      const due = and(
+        eq(s.globalSettings.id, 1),
+        eq(s.globalSettings.mailboxCleanupEnabled, true),
+        or(
+          eq(s.globalSettings.mailboxCleanupImmediate, true),
+          isNull(s.globalSettings.mailboxCleanupLastRunAt),
+          lte(s.globalSettings.mailboxCleanupLastRunAt,
+            sql<number>`${nowMs} - coalesce(${s.globalSettings.mailboxCleanupIntervalMs}, ${DEFAULT_MAILBOX_CLEANUP_INTERVAL_MS})`),
+        ),
+      );
+      const expiredAndDue = and(
+        lte(s.mailboxes.expiresAt, now),
+        exists(db.select({ id: s.globalSettings.id }).from(s.globalSettings).where(due)),
+      );
+
+      // D1 batch 与 SQLite 事务都保证：删除和记录时间一起提交，失败可在下一轮重试。
+      if ("batch" in rawDb) {
+        const [deleted] = await rawDb.batch([
+          rawDb.delete(s.mailboxes).where(expiredAndDue).returning({ id: s.mailboxes.id }),
+          rawDb.update(s.globalSettings).set({ mailboxCleanupLastRunAt: nowMs }).where(due),
+        ]);
+        return deleted.length;
+      }
+      return rawDb.transaction((tx) => {
+        const deleted = tx.delete(s.mailboxes).where(expiredAndDue).returning({ id: s.mailboxes.id }).all();
+        tx.update(s.globalSettings).set({ mailboxCleanupLastRunAt: nowMs }).where(due).run();
+        return deleted.length;
+      });
     },
 
     async list(opts) {

@@ -17,10 +17,10 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./frontend/dist"
 binding = "ASSETS"
 
-# 健康监控定时任务：scheduled 处理函数按此 cron 到期扫描各渠道（间隔仍受
-# 渠道 settings.monitorIntervalMs / HEALTH_CHECK_INTERVAL_MS 控制）
+# 每分钟检查邮箱清理和渠道验活是否到期；两项功能各自遵守全局设置中的开关和间隔。
+# Workers 的过期即清理精度受 Cron 调度限制，访问邮箱概览时也会触发到期清理。
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
 
 [[d1_databases]]
 binding = "DB"

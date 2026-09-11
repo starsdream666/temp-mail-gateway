@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Server, KeyRound, Mail, Globe, Activity, BookOpen, Settings, LogOut, Menu, X } from 'lucide-react';
 import { useToast } from './Toast';
 import { useAuth } from '../context/AuthContext';
+import { getServiceInfo } from '../api/client';
 
 export const Layout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
   const navigate = useNavigate();
   const toast = useToast();
   const { logoutUser } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+    getServiceInfo()
+      .then((info) => {
+        if (active) setVersion(info.version);
+      })
+      .catch(() => {
+        // 版本信息不影响管理操作；请求失败时保持隐藏。
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -76,7 +92,14 @@ export const Layout: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-slate-900 leading-none text-base">Temp Mail Gateway</h1>
-            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">管理控制台</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+              管理控制台
+              {version && (
+                <span className="ml-2 font-mono text-slate-600" title="当前版本">
+                  v{version}
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <button
@@ -164,8 +187,16 @@ export const Layout: React.FC = () => {
           </nav>
         </div>
 
-        {/* 侧边栏底部：登录状态与退出 */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        {/* 侧边栏底部：当前版本、登录状态与退出 */}
+        <div className="shrink-0 p-4 border-t border-slate-100 bg-slate-50/50">
+          {version && (
+            <div className="mb-3 px-2 flex items-center justify-between text-[11px] text-slate-500">
+              <span>当前版本</span>
+              <span className="px-2 py-0.5 rounded bg-white border border-slate-200 font-mono text-slate-700">
+                v{version}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-3 px-2">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">

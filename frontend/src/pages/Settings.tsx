@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, KeyRound, Loader2, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { Activity, Eraser, KeyRound, Loader2, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getGlobalSettings, updateGlobalSettings } from '../api/client';
 import type { GlobalSettings, UpdateGlobalSettingsPayload } from '../types';
@@ -23,6 +23,9 @@ export const Settings: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [healthEnabled, setHealthEnabled] = useState(true);
   const [intervalSeconds, setIntervalSeconds] = useState('300');
+  const [cleanupEnabled, setCleanupEnabled] = useState(false);
+  const [cleanupImmediate, setCleanupImmediate] = useState(false);
+  const [cleanupIntervalSeconds, setCleanupIntervalSeconds] = useState('3600');
   const [hourlyLimit, setHourlyLimit] = useState('60');
   const [concurrency, setConcurrency] = useState('0');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -36,6 +39,9 @@ export const Settings: React.FC = () => {
   const navigate = useNavigate();
 
   const fillRuntime = (s: GlobalSettings) => {
+    setCleanupEnabled(s.mailboxCleanupEnabled);
+    setCleanupImmediate(s.mailboxCleanupImmediate);
+    setCleanupIntervalSeconds(String(s.mailboxCleanupIntervalMs / 1000));
     setHealthEnabled(s.healthCheckEnabled);
     setIntervalSeconds(String(s.healthCheckIntervalMs / 1000));
     setHourlyLimit(String(s.mailboxesPerKeyPerHour));
@@ -50,7 +56,16 @@ export const Settings: React.FC = () => {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const runtimeDirty = !!saved && (healthEnabled !== saved.healthCheckEnabled || Number(intervalSeconds) * 1000 !== saved.healthCheckIntervalMs || Number(hourlyLimit) !== saved.mailboxesPerKeyPerHour || Number(concurrency) !== saved.maxConcurrentRequestsPerKey || !intervalSeconds || !hourlyLimit || !concurrency);
+  const runtimeDirty = !!saved && (
+    cleanupEnabled !== saved.mailboxCleanupEnabled
+    || cleanupImmediate !== saved.mailboxCleanupImmediate
+    || (cleanupEnabled && !cleanupImmediate && (!cleanupIntervalSeconds || Number(cleanupIntervalSeconds) * 1000 !== saved.mailboxCleanupIntervalMs))
+    || healthEnabled !== saved.healthCheckEnabled
+    || Number(intervalSeconds) * 1000 !== saved.healthCheckIntervalMs
+    || Number(hourlyLimit) !== saved.mailboxesPerKeyPerHour
+    || Number(concurrency) !== saved.maxConcurrentRequestsPerKey
+    || !intervalSeconds || !hourlyLimit || !concurrency
+  );
   const passwordDirty = !!newPassword || !!confirmPassword;
   useEffect(() => {
     if (!runtimeDirty && !passwordDirty) return;
@@ -65,6 +80,11 @@ export const Settings: React.FC = () => {
     setRuntimeError(null);
     try {
       const values = {
+        mailboxCleanupEnabled: cleanupEnabled,
+        mailboxCleanupImmediate: cleanupImmediate,
+        mailboxCleanupIntervalMs: cleanupEnabled && !cleanupImmediate
+          ? numberValue(cleanupIntervalSeconds ? String(Number(cleanupIntervalSeconds) * 1000) : '', '清理间隔（毫秒）', 60_000, 86_400_000)
+          : saved.mailboxCleanupIntervalMs,
         healthCheckEnabled: healthEnabled,
         healthCheckIntervalMs: numberValue(intervalSeconds ? String(Number(intervalSeconds) * 1000) : '', '验活间隔（毫秒）', 60_000, 86_400_000),
         mailboxesPerKeyPerHour: numberValue(hourlyLimit, '每小时建箱上限'),
@@ -76,7 +96,7 @@ export const Settings: React.FC = () => {
       setSaving('runtime');
       const res = await updateGlobalSettings(patch);
       setSaved(res.settings); fillRuntime(res.settings);
-      toast.success('全局配置已保存，新的请求和下一轮巡检将使用新设置');
+      toast.success('全局配置已保存，新的请求和后台任务将使用新设置');
     } catch (err) { setRuntimeError((err as Error).message); }
     finally { setSaving(null); }
   };
@@ -113,7 +133,7 @@ export const Settings: React.FC = () => {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-3 text-2xl font-bold text-slate-900"><SettingsIcon className="w-7 h-7 text-indigo-600" />全局设置</h1>
-          <p className="mt-2 text-sm text-slate-500">管理登录密码、渠道监控和默认调用限制。保存后自动生效，重启后保留。</p>
+          <p className="mt-2 text-sm text-slate-500">管理登录密码、过期邮箱清理、渠道监控和默认调用限制。保存后自动生效，重启后保留。</p>
         </div>
         <span className={`text-xs px-3 py-1.5 rounded-full ${runtimeDirty || passwordDirty ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
           {runtimeDirty || passwordDirty ? '有未保存的修改' : '配置已同步'}
@@ -135,6 +155,31 @@ export const Settings: React.FC = () => {
                 <p className="mt-2 text-xs leading-6 text-slate-500">60–86400 秒；300 秒 = 5 分钟。单独配置的渠道沿用自己的间隔，具体检测时间取决于巡检调度。</p>
               </div>
             </div>
+          </section>
+
+          <section className={cardClass}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2"><Eraser className="w-5 h-5 text-indigo-600" /><h2 className="font-semibold text-slate-900">过期邮箱自动清理</h2></div>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-700"><input type="checkbox" checked={cleanupEnabled} onChange={(e) => setCleanupEnabled(e.target.checked)} className="w-4 h-4 accent-indigo-600" />开启自动清理过期邮箱</label>
+                <p className="mt-2 text-xs leading-6 text-slate-500">自动清理<Link to="/mailboxes" className="text-indigo-600 hover:underline">邮箱概览</Link>中的过期记录。默认关闭；未过期和长期有效的邮箱会保留。</p>
+              </div>
+              <fieldset disabled={!cleanupEnabled} className="grid gap-5 sm:grid-cols-2 disabled:opacity-60">
+                <div>
+                  <p id="mailbox-cleanup-mode-label" className="text-sm font-medium text-slate-700 mb-3">清理方式</p>
+                  <div role="radiogroup" aria-labelledby="mailbox-cleanup-mode-label" className="space-y-3">
+                    <label className="flex items-center gap-2.5 text-sm text-slate-700"><input type="radio" name="mailbox-cleanup-mode" value="interval" checked={!cleanupImmediate} onChange={() => setCleanupImmediate(false)} className="w-4 h-4 accent-indigo-600" />按间隔清理</label>
+                    <label className="flex items-center gap-2.5 text-sm text-slate-700"><input type="radio" name="mailbox-cleanup-mode" value="immediate" checked={cleanupImmediate} onChange={() => setCleanupImmediate(true)} className="w-4 h-4 accent-indigo-600" />过期立即清理</label>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="mailbox-cleanup-interval" className="block text-sm font-medium text-slate-700 mb-2">清理间隔（秒）</label>
+                  <input id="mailbox-cleanup-interval" type="number" min={60} max={86400} step={0.001} required={cleanupEnabled && !cleanupImmediate} disabled={cleanupImmediate} value={cleanupIntervalSeconds} onChange={(e) => setCleanupIntervalSeconds(e.target.value)} className={inputClass} />
+                  <p className="mt-2 text-xs leading-6 text-slate-500">{cleanupImmediate ? '邮箱过期后尽快清理，无需等待批量清理间隔。' : '60–86400 秒，默认 3600 秒（1 小时）。启用或修改清理设置后，首次检查先清理一次，再按间隔执行。'}</p>
+                </div>
+              </fieldset>
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500 leading-6">仅删除网关记录，上游邮箱由上游管理。任务在后台运行，无需保持页面打开，也不受渠道验活开关影响。Docker 每秒检查；Cloudflare Workers 每分钟检查，访问邮箱概览时也会检查。</div>
           </section>
 
           <section className={cardClass}>

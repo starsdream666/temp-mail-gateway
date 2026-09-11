@@ -325,7 +325,7 @@ npm run frontend:build   # 在仓库根目录执行，产物写入 frontend/dist
 1. **前端路由路径不得与 API 前缀冲突**。`/v1`、`/admin`、`/api` 是后端命名空间，这些前缀下的未匹配路径**始终返回 JSON 错误信封**而非 `index.html`。因此新增前端页面时，路径不要以这三者开头（现有 `/upstreams`、`/keys`、`/mailboxes`、`/login` 均安全）。
 2. 未执行前端构建时（`frontend/dist` 不存在），后端自动退化为纯 API 模式，根路径返回服务信息 JSON。
 
-上述行为由后端测试 `test/e2e/spa-hosting.test.ts` 锁定，修改路由结构后请运行 `npm test` 校验。
+修改路由结构后请运行前后端类型检查与 Docker 冒烟验证。
 
 ### 构建注意事项
 

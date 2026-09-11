@@ -79,6 +79,9 @@ export interface SyncDomainsResult {
 }
 
 export interface GlobalSettings {
+  mailboxCleanupEnabled: boolean;
+  mailboxCleanupImmediate: boolean;
+  mailboxCleanupIntervalMs: number;
   healthCheckEnabled: boolean;
   healthCheckIntervalMs: number;
   mailboxesPerKeyPerHour: number;

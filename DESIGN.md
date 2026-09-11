@@ -13,7 +13,7 @@
 2. **按域名路由**：请求中的邮箱域名决定由哪个上游处理；查域名时只返回对应上游的域名。
 3. **多部署形态**：Cloudflare Workers / Vercel / Docker 均可部署。
 4. **可管理**：Admin 后台配置每个上游的 endpoint + API key，可拉取其域名列表，可签发网关 API key。
-5. **真实适配器先行**：骨架完成并稳定后逐个接入真实上游；Dummy 假上游只用于测试（`test/helpers.ts` 显式挂载），不在生产 bootstrap 内。
+5. **真实适配器先行**：骨架完成并稳定后逐个接入真实上游；Dummy 假上游只用于本地开发验证，不在生产 bootstrap 内。
 
 ## 2. 总体架构
 
@@ -95,9 +95,6 @@ temp-mail-gateway/
 │       └── node.ts               # Node/Docker 入口：better-sqlite3 stores → createApp
 ├── frontend/                     # React 18 + Vite + TS + Tailwind 管理后台 SPA
 ├── migrations/                   # drizzle-kit 生成的 SQL 迁移（0000~0005）
-└── test/
-    ├── contract/                 # 适配器契约测试：任何 adapter 都必须过同一套用例
-    └── e2e/                      # 内存 SQLite 起真 app 的端到端测试
 ```
 
 要点：`core/` + `ports/` + `adapters/registry.ts` 是壳子的核心；真实上游适配器只是往 `adapters/upstreams/` 加目录 + 注册一行。
@@ -219,7 +216,6 @@ export interface UpstreamAdapter {
 - **cfg + ref 全部显式传参**：适配器可被并发用于多个上游实例，也方便测试时直接构造假 cfg。
 - **可选能力用 `?` 方法 + CAPABILITY_MISSING**：网关层先查 `deleteMessage in adapter` 决定返回 501 还是透传，不靠配置文件声明能力。
 - **出网请求走注入的 `fetch`**：适配器构造函数接收 `deps: { fetchFn, logger }`，默认 `globalThis.fetch`。这是将来做代理池/IP 轮换、以及录制回放测试的钩子。
-- **契约测试**：`test/contract/` 提供一套所有适配器必须通过的用例（创建→列域名→收件→详情→删除），Dummy 适配器在 CI 里跑它，真实适配器接入时直接复用，保证行为一致。
 
 ## 6. 存储抽象与数据模型
 
@@ -396,6 +392,7 @@ export const healthChecks = sqliteTable("health_checks", {
 - `GET /admin/health` + `POST /admin/health/check`：健康状态与手动检测。
 - `GET /admin/mailboxes`：邮箱概览（只读，分页 + 按渠道过滤，total 与过滤一致）。
 - `POST /admin/mailboxes/prune-expired`：清理已过期的网关记录（**不向上游发请求**，上游到期后自行回收邮箱）；管理端「邮箱概览」页有对应按钮。
+- 全局设置支持 `mailboxCleanupEnabled`（默认关闭）、`mailboxCleanupImmediate`（默认关闭）与 `mailboxCleanupIntervalMs`（默认 3600000，范围 60000–86400000）。清理条件为 `expiresAt <= now`，无到期时间的记录保留。Node 每秒检查；Workers 每分钟 Cron 以及邮箱概览请求触发。间隔模式把上次执行时间持久化，删除与计时更新通过 SQLite 事务 / D1 batch 一起提交，失败可重试；只有修改清理设置才重置计时，不依赖健康检查开关。
 - `POST /admin/mailboxes/import`：纳管上游已存在的地址（`{addresses, apiKeyId?}` → `{imported, failed}`，逐地址独立结算）。依赖适配器的可选能力 `resolveByAddress`——只有账号级凭证的上游能实现（cf-temp-email、MoeMail 已实现；DuckMail 因每邮箱独立凭证、YYDS 因缺「地址→账号 id」查询端点，均返回 `CAPABILITY_MISSING`）。**刻意不开在 `/v1`**：cf 的 admin token 是实例级的，自助纳管等于把「读任意已存在地址」发给每把 key。
 - `GET /admin/orphan-mailboxes` + `DELETE /admin/orphan-mailboxes/{id}` + `DELETE /admin/orphan-mailboxes`：尽力删除留下的残留（迁移 0007 建 `orphan_mailboxes` 表）。`?force=1` 删除时上游失败即记一条，带上游侧标识供手工清理；上游报「不存在」不记（本来就没了），严格删除被 502 拦下也不记（记录还在）。
 - **租户隔离注**：统一 API 的邮箱读取/删除做归属校验（他人 key 的邮箱一律 404，防跨租户读信；透传自动登记的共享邮箱不受限）。
@@ -438,11 +435,11 @@ export const healthChecks = sqliteTable("health_checks", {
 
 ### M0：项目壳子（已完成 2026-09-02~05）
 
-- [x] 脚手架：package.json、tsconfig、vitest、wrangler.toml、drizzle.config.ts
+- [x] 脚手架：package.json、tsconfig、wrangler.toml、drizzle.config.ts
 - [x] `ports/` 全部接口 + `db/schema.ts` + 迁移
 - [x] `crypto.ts` AES-GCM 实现（两端通用）
 - [x] D1 / better-sqlite3 共用一套 Drizzle Store 实现（`adapters/stores/drizzle/`）
-- [x] Dummy 适配器 + 注册表（现仅测试经 `test/helpers.ts` 显式挂载）
+- [x] Dummy 适配器 + 注册表（仅供本地开发验证）
 - [x] `core/routing.ts`（域名解析 + 挑选）与 `core/keys.ts`
 - [x] `/v1` 全部端点（zod-openapi）+ key 鉴权中间件 + 错误信封
 - [x] `/admin` API + 管理后台（上游 CRUD、域名同步、key 管理）
@@ -456,7 +453,6 @@ export const healthChecks = sqliteTable("health_checks", {
 
 - [x] cloudflare_temp_email 适配器（管理端 API：`x-admin-auth`；建邮箱/收信/删单封/删邮箱/原始报文，端点以 floatmail 扩展的调用为参考还原）
 - [x] MoeMail 适配器（`X-API-Key`；建邮箱含 expiryTime、收信、删邮箱；无单封删除与原始报文 → 能力缺失走 501）
-- [x] 契约测试以模拟上游 fetch 覆盖两个适配器（`test/contract/mocks/`）
 - [x] 与真实自建实例联调（域名同步、建邮箱、收信、删除全生命周期，2026-09-05 通过）
 - [x] MoeMail 有效期同步：expiresInSeconds 可选配置 + 档位就近吸附（1h/24h/3d，**不含 7d**——真实实例拒绝；0=永久只能经 `settings.defaultExpiryMs: 0` 显式表达）+ expiresAt 与上游一致
 - [x] 域名调用管控：domains.enabled 开关（管理端 UI / PUT /admin/upstreams/{id}/domains/{domain}，另支持按渠道批量 PUT /admin/upstreams/{id}/domains），停用域名不路由/不列出/创建 403 DOMAIN_DISABLED；重新同步保留停用状态；批量停用渠道域名 ≠ 停用上游实例（前者只挡建箱）
@@ -466,7 +462,7 @@ export const healthChecks = sqliteTable("health_checks", {
 - [x] 域名变化自动同步（迁移 0006 加 `health_checks.sync_action`）：测活检测到增删后默认直接 `replaceDomains` 收敛注册表，渠道可用 `settings.autoSyncDomains=false` 退回只检测；安全闸 `planDomainSync`（纯函数、单测覆盖）——空列表与超 `max(5, 30%)` 的批量移除只应用新增、保留待移除域名并标记 `blocked:<原因>` 等人工确认，探测失败一律不动注册表；`sync_action` 取值 `applied` / `detected` / `blocked:*`，`GET /admin/health` 用 `pendingSync` 单独暴露待确认项
 - [x] YYDS Mail 适配器（`X-API-Key`（AC- 前缀）；按官方 OpenAPI 规范实现：建邮箱含 Idempotency-Key、收信、删单封、删邮箱、原始报文，`{success,data,error,errorCode}` 信封解包，baseUrl 自动归一 `/v1`；expiresAt 缺失时按官方 24h 留存策略推算；2026-09-05 与真实实例联调通过：建/列/删全生命周期 OK，用户 key 的请求可过上游 CF 盾——匿名请求仍被 IP 级拦截）
 - [x] DuckMail 适配器（hydra 格式分页域名列表自动翻页；建箱网关代管密码+POST /token 换邮箱 Bearer 凭证；完整能力含原始报文/单封删除；expiresIn 缺省 24h、正数秒自定义；2026-09-05 官方托管 api.duckmail.sbs 真实验证全生命周期通过）
-- [x] 内置 Dummy 假上游退出生产适配器列表（仅测试经 test/helpers.ts 显式挂载）
+- [x] 内置 Dummy 假上游退出生产适配器列表（仅供本地开发验证）
 - [ ] mail.tm 适配器（JSON-LD/hydra、JWT 管理、SSE）—— 暂缓，参考项目未覆盖
 - [ ] 上游不可用时的降级提示已在创建链路生效（sync warning），列表页展示待前端跟进
 

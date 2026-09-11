@@ -5,10 +5,13 @@ import type { AdminDeps } from "./admin";
 import { ErrorEnvelope } from "./schemas";
 import { AppError } from "../core/errors";
 import { hashAdminPassword } from "../core/passwords";
-import { publicSettings, readSettings, type SettingsPatch } from "../core/settings";
+import { publicSettings, readSettings, MIN_MAILBOX_CLEANUP_INTERVAL_MS, MAX_MAILBOX_CLEANUP_INTERVAL_MS, type SettingsPatch } from "../core/settings";
 import { checkAdminPassword, currentAdminConfig, clearAdminSession } from "./middleware/auth";
 
 const GlobalSettingsSchema = z.object({
+  mailboxCleanupEnabled: z.boolean().describe("是否自动清理已过期的网关邮箱记录，默认关闭"),
+  mailboxCleanupImmediate: z.boolean().describe("开启后过期即清理，不等待批量清理间隔"),
+  mailboxCleanupIntervalMs: z.number().int().min(MIN_MAILBOX_CLEANUP_INTERVAL_MS).max(MAX_MAILBOX_CLEANUP_INTERVAL_MS).describe("批量清理间隔（毫秒），默认一小时"),
   healthCheckEnabled: z.boolean(),
   healthCheckIntervalMs: z.number().int().min(60_000).max(86_400_000),
   mailboxesPerKeyPerHour: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),

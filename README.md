@@ -5,7 +5,7 @@
 - 设计文档：[DESIGN.md](./DESIGN.md)
 - API 调用指南（适合 AI / 开发者读取）：[API.md](./API.md)
 - 前端架构说明：[frontend/ARCHITECTURE.md](./frontend/ARCHITECTURE.md)
-- 当前状态：**壳子 + 管理后台 SPA + 4 个真实上游适配器（cloudflare_temp_email、MoeMail、YYDS Mail、DuckMail）+ 统一 API + 原生格式透传 + 域名/渠道管控 + 每 Key 独立限流 + 健康监控（域名自动同步）+ 过期清理 + 地址纳管 + 残留可见性 + Docker `v0.2.4`**。测试 **304 passed + 1 skipped**，双端 typecheck 干净。cf 适配器已按 v1.9.0 实测修正 MIME/分页/`address_id`。
+- 当前状态：**壳子 + 管理后台 SPA + 4 个真实上游适配器（cloudflare_temp_email、MoeMail、YYDS Mail、DuckMail）+ 统一 API + 原生格式透传 + 域名/渠道管控 + 每 Key 独立限流 + 健康监控（域名自动同步）+ 过期清理 + 地址纳管 + 残留可见性 + Docker `v0.2.5`**。前后端 typecheck 干净。cf 适配器已按 v1.9.0 实测修正 MIME/分页/`address_id`。
 - 开源协议：[MIT](./LICENSE)；第三方依赖声明：[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
 
 ## 快速开始（Docker，推荐）
@@ -44,7 +44,7 @@ docker run -d --name temp-mail-gateway \
 
 ## GitHub Actions 自动构建与发布
 
-工作流位于 [`.github/workflows/docker.yml`](./.github/workflows/docker.yml)，构建目标为 `linux/amd64`。它先执行前后端类型检查、后端测试和前端构建，再启动真正构建出的 Docker 镜像，验证 SQLite 迁移、登录、全局设置、Key 限流、静态资源和 API。只有这些检查通过后，才推送同一个已测试的镜像。
+工作流位于 [`.github/workflows/docker.yml`](./.github/workflows/docker.yml)，构建目标为 `linux/amd64`。它先执行前后端类型检查和前端构建，再启动真正构建出的 Docker 镜像，验证 SQLite 迁移、登录、全局设置、Key 限流、静态资源和 API。只有这些检查通过后，才推送同一个已测试的镜像。
 
 首次在 GitHub 仓库 **Settings → Secrets and variables → Actions → New repository secret** 中配置：
 
@@ -56,9 +56,9 @@ Docker 用户名和镜像名已写入工作流的非敏感配置。令牌仅交�
 
 | 触发事件 | 行为 |
 |---|---|
-| 提交至 `main` | 测试、构建并发布 `latest`、`main`、`sha-<短提交号>` |
-| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布原始标签（如 `v0.2.4`）、完整版本号（`0.2.4`）、主次版本号（`0.2`）、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
-| 向 `main` 提交 PR | 测试、构建和冒烟验证，不登录 Docker Hub、不推送镜像 |
+| 提交至 `main` | 检查、构建并发布 `latest`、`main`、`sha-<短提交号>` |
+| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布原始标签（如 `v0.2.5`）、完整版本号（`0.2.5`）、主次版本号（`0.2`）、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
+| 向 `main` 提交 PR | 类型检查、构建和冒烟验证，不登录 Docker Hub、不推送镜像 |
 | Actions 页面手动运行 | 默认只验证；在 `main` 或版本标签上勾选 `publish` 后才推送 |
 
 发布版本前同步更新 `package.json`、`package-lock.json` 与服务端版本号（`src/core/app.ts`），提交后推送相应 `v<版本号>` 标签。工作流会拒绝版本不一致的发布。
@@ -84,16 +84,18 @@ npm run dev                 # 管理后台 + API 都在 http://localhost:8787
 
 ## 全局设置
 
-登录后打开侧栏「全局设置」（`/settings`），可修改管理员密码、自动验活开关、默认验活间隔、每个 Key 的默认并发请求上限和每小时建箱上限。后台保持仅密码登录。配置保存在数据库，重启后保留；保存后新的请求和下一轮巡检读取最新设置，无需重启。
+登录后打开侧栏「全局设置」（`/settings`），可修改管理员密码、过期邮箱自动清理、自动验活开关、默认验活间隔、每个 Key 的默认并发请求上限和每小时建箱上限。后台保持仅密码登录。配置保存在数据库，重启后保留；保存后新的请求和下一轮巡检读取最新设置，无需重启。
 
 - 生效优先级：渠道 / Key 单独设置 → 数据库中的全局设置 → 环境变量 → 内置默认值。
-- 验活间隔允许 60–86400 秒；关闭全局自动验活会暂停全部定时检查，仍可手动「立即检测」。Node 每分钟扫描一次；Workers 受部署的 Cron 调度频率约束（当前每 5 分钟），页面修改间隔不会修改 Cron。
+- 验活间隔允许 60–86400 秒；关闭全局自动验活会暂停全部定时检查，仍可手动「立即检测」。Node 每分钟扫描一次；Workers 受部署的 Cron 调度频率约束（当前每分钟），页面修改间隔不会修改 Cron。
+- **过期邮箱自动清理默认关闭**，只删除「邮箱概览」中的网关记录，不调用上游删除接口；未过期和长期有效（无到期时间）的邮箱会保留。开启后可选「按间隔清理」（60–86400 秒，默认 1 小时）或「过期立即清理」。启用或修改清理设置后，首次检查先执行一次；间隔模式的上次清理时间保存在数据库，重启和多实例不会重置计时。
+- Node/Docker 每秒检查清理任务，立即模式通常在过期后 1 秒内处理；Workers 的 Cron 每分钟检查，访问邮箱概览也会检查是否需要清理，实际执行精度受 Cron 调度影响。清理独立于渠道验活，无需页面保持打开；已打开的邮箱概览在启用自动清理时每 5 秒刷新一次，页面隐藏时暂停刷新。
 - 默认并发上限为 `0`（不限，兼容旧行为）。正整数限制每个 Key 同时执行的请求数，统一 API 与上游透传合计；超限返回 `429 RATE_LIMITED`。完成、失败或取消响应流后释放名额。
 - 默认每小时建箱上限为 `60`（环境变量可覆盖）；`0` 为不限，仅针对 `POST /v1/mailboxes`。修改默认值不会重置本小时的已用次数。
 - API Keys 的签发和「调用限制」均支持独立的并发上限及建箱限额：跟随系统默认 / 自定义 / 不限制。并发计数与建箱计数按 Node 进程或 Workers isolate 分别计算，多实例之间不共享额度。
 - 修改密码需验证当前密码；新密码至少 8 字符，使用随机盐 PBKDF2 摘要存储，不会在设置接口回传。修改后所有旧会话失效，需要重新登录。在后台改密后，保存的密码优先于 `ADMIN_PASSWORD`；该环境变量仍用于首次登录及作为部署必填项。`MASTER_KEY`、数据库路径、服务端口等部署配置仍通过环境变量管理。
 
-升级包含迁移 `0009_global_settings.sql`。Node/Docker 用新代码启动时自动执行；Workers 在发布新代码前运行 `npx wrangler d1 migrations apply DB --remote`。修改本地代码不会更新 Docker Hub 已发布的镜像，Docker 部署需重新构建镜像。旧 Key 新增的并发字段为 `null`，继承全局默认。
+升级包含迁移 `0009_global_settings.sql` 和 `0010_mailbox_auto_cleanup.sql`（清理设置、持久化调度时间及到期索引）。Node/Docker 用新代码启动时自动执行；Workers 在发布新代码前运行 `npx wrangler d1 migrations apply DB --remote`。修改本地代码不会更新 Docker Hub 已发布的镜像，Docker 部署需重新构建镜像。旧 Key 新增的并发字段为 `null`，继承全局默认。
 
 ## 上游状态监控（存活 + 域名变化）
 
@@ -118,7 +120,7 @@ Node/Docker 部署自带**定时健康监控**：每 60 秒扫描一次各渠道
 
 自动同步不影响存量邮箱：域名从注册表移除后，该域名下已创建的邮箱仍可正常读信与删除（统一 API 的读写按邮箱记录寻址，不查域名表），只是不能再用它建新邮箱——而上游已经下架了这个域名，本来也建不出来。
 
-Workers 部署没有常驻定时器：已内置 `scheduled` 处理函数并按 `wrangler.toml` 的 `[triggers]` cron（默认每 5 分钟）执行到期扫描——扫描只探测"超过自身有效间隔"的渠道，渠道仍可在状态监控页单独调频率或关闭。任意部署形态下都可用状态页的「立即检测」（`POST /admin/health/check`）手动触发一轮。
+Workers 部署没有常驻定时器：已内置 `scheduled` 处理函数并按 `wrangler.toml` 的 `[triggers]` cron（默认每分钟）执行到期扫描——扫描只探测"超过自身有效间隔"的渠道，渠道仍可在状态监控页单独调频率或关闭。任意部署形态下都可用状态页的「立即检测」（`POST /admin/health/check`）手动触发一轮。
 
 **请求配额提示**：每次探测 = 1 次对上游的请求。若上游部署在 Cloudflare 免费版（每日 10 万请求），默认 5 分钟/轮 ≈ 288 次/天/渠道（约 0.3% 配额）；把自托管渠道的频率调到 30 分钟/轮则仅 ≈ 48 次/天。官方托管渠道（如 YYDS Mail）不消耗你的配额。
 
@@ -221,14 +223,12 @@ curl -s -X DELETE "$BASE/v1/mailboxes/{id}?force=1" -H "Authorization: Bearer tm
 
 注意读取单个邮箱（`GET /v1/mailboxes/{id}`）比列表宽松：共享邮箱任何 key 都能读，这样透传创建的邮箱才能被管理。
 
-## 测试
+## 代码检查
 
 ```bash
-npm test        # 契约测试（各真实上游 + 内存态 Dummy 过全套契约）+ e2e（sqlite 内存库全流程）
 npm run typecheck
+npm run frontend:build
 ```
-
-> Dummy 假上游仅供测试使用（`test/helpers.ts` 显式挂载），不注册进生产适配器列表。
 
 ## 部署到 Cloudflare Workers
 
@@ -253,7 +253,7 @@ Vercel 形态（复用 worker 入口）为 M3 目标，未验证。
 | Node / Docker | `@hono/node-server` 的 `serveStatic` 中间件 | 读 `frontend/dist/index.html` 后内存返回 |
 | Workers | 平台 `[assets]` 前置匹配 | Worker 内经 `ASSETS` 绑定取 `index.html` |
 
-路由优先级：静态资源 → API 路由（`/v1`、`/admin`、`/api`）→ SPA 回退。`/v1`、`/admin`、`/api` 前缀下的未匹配路径**始终返回 JSON 错误信封**，不会被回退成 HTML（这条由 `test/e2e/spa-hosting.test.ts` 锁定）。
+路由优先级：静态资源 → API 路由（`/v1`、`/admin`、`/api`）→ SPA 回退。`/v1`、`/admin`、`/api` 前缀下的未匹配路径**始终返回 JSON 错误信封**，不会被回退成 HTML。
 
 ## 接入新的上游适配器
 
@@ -261,8 +261,7 @@ Vercel 形态（复用 worker 入口）为 M3 目标，未验证。
    `listDomains / createMailbox / deleteMailbox / listMessages / getMessage` 必选，`deleteMessage / getSource` 可选。
    - 失败一律抛 `UpstreamError`（code + retryable），网关统一转 HTTP 状态码；
    - 适配器无状态，配置和邮箱凭证全部显式传参；出网请求走注入的 `deps.fetchFn`（共享工具见 `adapters/upstreams/_shared/http.ts`）。
-2. 在 `test/contract/` 里让新适配器跑一遍契约测试（`runAdapterContractTests`）：写一个模拟上游的 `fetch`（参考 `test/contract/mocks/`），对齐真实上游的端点、字段与鉴权头。
-3. 在 `src/bootstrap.ts` 注册一行。
+2. 在 `src/bootstrap.ts` 注册适配器。
 
 壳子（路由/存储/管理端/统一 API）无需任何改动。
 
@@ -274,7 +273,7 @@ Vercel 形态（复用 worker 入口）为 M3 目标，未验证。
 | `moemail` | [MoeMail](https://github.com/beilunyang/moemail)（自建实例） | MoeMail API Key（`X-API-Key`） | 见下方有效期说明 | 建邮箱、收信、删单封、删邮箱；无原始报文（上游正文以 content/html 内联返回，不提供 RFC822 端点） |
 | `yydsmail` | [YYDS Mail](https://vip.215.im/docs)（官方托管或自建部署） | AC- 前缀 API Key（`X-API-Key`） | 无 | 完整能力：建邮箱、收信、删单封、删邮箱、原始报文；baseUrl 填实例根地址（带不带 `/v1` 均可，自动归一） |
 | `duckmail` | [DuckMail](https://github.com/MoonWeSif/DuckMail)（官方托管 api.duckmail.sbs 或自建部署） | 可选；dk_ 前缀 API Key（私有域名可见与建箱需要） | 无 | 完整能力：建邮箱（网关代管密码+token）、收信、删单封、删邮箱、原始报文；系统域名可匿名建箱，域名列表自动翻页 |
-| `dummy` | 内存态假上游 | 不需要 | `domains: string[]` | **仅供测试**（`test/helpers.ts` 显式挂载），不注册进生产适配器列表 |
+| `dummy` | 内存态假上游 | 不需要 | `domains: string[]` | **仅供本地开发验证**，不注册进生产适配器列表 |
 
 ### MoeMail 有效期（全部可选，最大兼容）
 
@@ -390,10 +389,6 @@ src/
 └── entries/       # worker.ts（Cloudflare）、node.ts（Node/Docker）
 
 frontend/          # 管理后台 SPA（React + Vite），构建产物 dist/ 由后端托管
-test/
-├── unit/          # key 生成等纯函数
-├── contract/      # 适配器契约（所有上游实现必须通过同一套用例）
-└── e2e/           # 进程内全链路 + SPA 托管路由优先级
 ```
 
 ## 前端

@@ -1,3 +1,7 @@
+# Tests are maintained locally but intentionally excluded from the public repository
+/test/
+vitest.config.ts
+
 # Dependencies and generated output
 node_modules/
 dist/

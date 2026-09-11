@@ -90,6 +90,19 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   return JSON.parse(text) as T;
 }
 
+// ==================== 公共信息 ====================
+
+export interface ServiceInfo {
+  name: string;
+  version: string;
+  docs: string;
+  ui: string;
+}
+
+export async function getServiceInfo(): Promise<ServiceInfo> {
+  return apiFetch<ServiceInfo>('/api/info', { cache: 'no-store' });
+}
+
 // ==================== 认证相关 ====================
 
 export async function login(password: string): Promise<void> {

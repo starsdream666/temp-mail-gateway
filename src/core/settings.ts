@@ -1,7 +1,14 @@
 import type { SettingsStore, StoredSettings } from "../ports/stores";
 import type { GatewayConfig } from "./app";
 
+export const DEFAULT_MAILBOX_CLEANUP_INTERVAL_MS = 3_600_000;
+export const MIN_MAILBOX_CLEANUP_INTERVAL_MS = 60_000;
+export const MAX_MAILBOX_CLEANUP_INTERVAL_MS = 86_400_000;
+
 export interface GlobalSettings {
+  mailboxCleanupEnabled: boolean;
+  mailboxCleanupImmediate: boolean;
+  mailboxCleanupIntervalMs: number;
   healthCheckEnabled: boolean;
   healthCheckIntervalMs: number;
   mailboxesPerKeyPerHour: number;
@@ -19,6 +26,9 @@ export async function readSettings(store: SettingsStore, config: GatewayConfig):
   const saved = await store.get();
   return {
     adminPasswordHash: saved?.adminPasswordHash ?? null,
+    mailboxCleanupEnabled: saved?.mailboxCleanupEnabled ?? false,
+    mailboxCleanupImmediate: saved?.mailboxCleanupImmediate ?? false,
+    mailboxCleanupIntervalMs: saved?.mailboxCleanupIntervalMs ?? DEFAULT_MAILBOX_CLEANUP_INTERVAL_MS,
     healthCheckEnabled: saved?.healthCheckEnabled ?? true,
     healthCheckIntervalMs: saved?.healthCheckIntervalMs ?? validInteger(config.healthCheckIntervalMs, 300_000, 60_000),
     mailboxesPerKeyPerHour: saved?.mailboxesPerKeyPerHour ?? validInteger(config.mailboxesPerKeyPerHour, 60, 0),
@@ -29,6 +39,9 @@ export async function readSettings(store: SettingsStore, config: GatewayConfig):
 /** 显式白名单：密码摘要绝不进入管理 API 的返回值。 */
 export function publicSettings(settings: RuntimeSettings): GlobalSettings {
   return {
+    mailboxCleanupEnabled: settings.mailboxCleanupEnabled,
+    mailboxCleanupImmediate: settings.mailboxCleanupImmediate,
+    mailboxCleanupIntervalMs: settings.mailboxCleanupIntervalMs,
     healthCheckEnabled: settings.healthCheckEnabled,
     healthCheckIntervalMs: settings.healthCheckIntervalMs,
     mailboxesPerKeyPerHour: settings.mailboxesPerKeyPerHour,

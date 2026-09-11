@@ -25,7 +25,7 @@ env:
 
 jobs:
   check:
-    name: Typecheck, tests and frontend
+    name: Typecheck and frontend
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,7 +42,6 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm --prefix frontend ci --no-audit --no-fund
       - run: npm run typecheck
-      - run: npm test
       - run: npm run frontend:build
 
   docker:

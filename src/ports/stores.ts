@@ -145,8 +145,10 @@ export interface MailboxStore {
   /** 透传副作用注销用：定位某个上游实例下的指定邮箱 */
   findByUpstreamMailboxId(upstreamId: string, upstreamMailboxId: string): Promise<MailboxRow | null>;
   delete(id: string): Promise<void>;
-  /** 按到期时间清理网关侧记录（不触碰上游），返回删除条数 */
-  deleteExpired(before: Date): Promise<number>;
+  /** 清理 expiresAt <= now 的网关侧记录（不触碰上游），返回删除条数。 */
+  deleteExpired(now: Date): Promise<number>;
+  /** 按数据库中的自动清理设置执行；删除与更新清理时间原子提交，未到期/关闭时返回 0。 */
+  deleteExpiredAutomatically(now: Date): Promise<number>;
   list(opts?: MailboxListFilter & { limit?: number; offset?: number }): Promise<MailboxRow[]>;
   /** 总数；过滤条件与 list 一致（与分页列表同口径） */
   count(opts?: MailboxListFilter): Promise<number>;
@@ -254,6 +256,9 @@ export interface OrphanStore {
 }
 
 export interface StoredSettings {
+  mailboxCleanupEnabled: boolean | null;
+  mailboxCleanupImmediate: boolean | null;
+  mailboxCleanupIntervalMs: number | null;
   adminPasswordHash: string | null;
   healthCheckEnabled: boolean | null;
   healthCheckIntervalMs: number | null;

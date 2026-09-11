@@ -11,6 +11,7 @@ import { buildDeps } from "../bootstrap";
 import { createApp, type SpaAssets } from "../core/app";
 import { runHealthSweep, HEALTH_SWEEP_INTERVAL_MS } from "../core/monitor";
 import { readSettings } from "../core/settings";
+import { MAILBOX_CLEANUP_SWEEP_INTERVAL_MS, runMailboxCleanup } from "../core/mailbox-cleanup";
 
 /**
  * 加载工作目录下的 .env（KEY=VALUE 每行一条，# 开头为注释）。
@@ -95,6 +96,22 @@ const gatewayDeps = buildDeps({
 });
 
 const app = createApp({ ...gatewayDeps, assets });
+
+// 邮箱清理独立于健康检查运行；无需页面保持打开，设置修改后下一秒即可生效。
+let cleaningMailboxes = false;
+const cleanupMailboxes = async () => {
+  if (cleaningMailboxes) return;
+  cleaningMailboxes = true;
+  try {
+    await runMailboxCleanup(gatewayDeps.stores.mailboxes);
+  } catch (err) {
+    console.error("[mailbox-cleanup] 自动清理失败:", (err as Error).message);
+  } finally {
+    cleaningMailboxes = false;
+  }
+};
+void cleanupMailboxes();
+setInterval(() => void cleanupMailboxes(), MAILBOX_CLEANUP_SWEEP_INTERVAL_MS).unref();
 
 /**
  * 上游健康监控：每 60 秒扫描一次各渠道是否"到期"（渠道可用 settings.monitorIntervalMs

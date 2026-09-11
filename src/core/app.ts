@@ -97,7 +97,7 @@ export function createApp(deps: GatewayDeps) {
     });
   }
 
-  const info = { name: "temp-mail-gateway", version: "0.2.4", docs: "/api/doc", ui: "/api/ui" };
+  const info = { name: "temp-mail-gateway", version: "0.2.5", docs: "/api/doc", ui: "/api/ui" };
   app.get("/api/info", (c) => c.json(info));
   // 托管 SPA 时根路径交给前端；纯 API 部署时返回服务信息
   if (deps.assets) {

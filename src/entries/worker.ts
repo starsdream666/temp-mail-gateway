@@ -8,6 +8,7 @@ import { RateLimiter } from "../core/ratelimit";
 import { runHealthSweep, type MonitorDeps } from "../core/monitor";
 import { LOGIN_ATTEMPT_LIMIT, LOGIN_WINDOW_MS } from "../api/admin";
 import { readSettings } from "../core/settings";
+import { runMailboxCleanup } from "../core/mailbox-cleanup";
 
 interface WorkerEnv {
   DB: D1Database;
@@ -119,9 +120,15 @@ export default {
     return built.app.fetch(req);
   },
 
-  async scheduled(_event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_event: ScheduledController, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
     const built = build(env);
     if (!built) return;
+    // 独立提交两项任务，健康检查关闭或失败都不会阻止邮箱自动清理。
+    ctx.waitUntil(
+      runMailboxCleanup(built.deps.stores.mailboxes).catch((err: unknown) => {
+        console.error("[mailbox-cleanup] 自动清理失败:", err);
+      }),
+    );
     // 到期扫描：只探测超过自身有效间隔的渠道（渠道可用 settings.monitorIntervalMs 覆盖）
     ctx.waitUntil(
       runHealthSweep(monitorDepsOf(built.deps)).catch(() => {

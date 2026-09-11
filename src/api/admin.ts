@@ -13,6 +13,7 @@ import { generateApiKey } from "../core/keys";
 import { RateLimiter } from "../core/ratelimit";
 import type { GatewayConfig } from "../core/app";
 import { registerSettingsRoutes } from "./settings";
+import { runMailboxCleanup } from "../core/mailbox-cleanup";
 import { runHealthChecks, effectiveMonitorIntervalMs, autoSyncDomainsEnabled, HEALTH_HISTORY_KEEP } from "../core/monitor";
 import { resolveUpstreamByDomain } from "../core/routing";
 import { UpstreamError } from "../ports/upstream";
@@ -758,6 +759,12 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
     }),
     async (c) => {
       const q = c.req.valid("query");
+      // Workers 无常驻定时器；列表请求也检查一次，返回清理后的最新概览。
+      try {
+        await runMailboxCleanup(stores.mailboxes);
+      } catch (err) {
+        console.error("[mailbox-cleanup] 概览自动清理失败:", err);
+      }
       const rows = await stores.mailboxes.list({
         limit: q.limit ?? 50,
         offset: q.offset ?? 0,
@@ -776,8 +783,8 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
       tags: ["admin"],
       summary: "清理已过期的邮箱记录（只删网关侧，不触碰上游）",
       description:
-        "上游到期后自行回收邮箱，但网关侧记录不会自动消失（expiresAt 此前只是存着没人用）。" +
-        "本操作删除 expiresAt 已早于当前时间的记录，不向上游发任何请求——为一批早已不存在的" +
+        "可在全局设置中启用自动清理，也可随时手动执行本操作。" +
+        "本操作删除 expiresAt 不晚于当前时间的记录，不向上游发任何请求——为一批早已不存在的" +
         "邮箱逐个调用上游删除只会白等超时。无到期时间的记录不受影响。",
       responses: {
         200: {
