@@ -22,6 +22,7 @@ import {
   parseUpstreamDate,
 } from "../_shared/http";
 import { parseMime } from "../_shared/mime";
+import { createUpstreamFetch } from "../../../core/upstream-fetch";
 
 /**
  * cloudflare_temp_email（dreamhunter2333/cloudflare_temp_email）管理端 API 适配器。
@@ -74,12 +75,16 @@ const MAIL_LOOKUP_MAX_PAGES = 20;
 
 export class CfTempEmailAdapter implements UpstreamAdapter {
   readonly type = "cf-temp-email";
+  readonly passthroughListPaths = ["/open_api/settings"];
+  observesPassthrough(method: string, path: string): boolean {
+    return method === "POST" && path === "/admin/new_address";
+  }
 
   private readonly deps: UpstreamHttpDeps;
 
   constructor(deps: UpstreamAdapterDeps = {}) {
     this.deps = {
-      fetchFn: deps.fetchFn ?? ((input, init) => fetch(input as never, init)),
+      fetchFn: createUpstreamFetch(deps.fetchFn, deps.timeoutMs),
       logger: deps.logger,
     };
   }
@@ -145,10 +150,11 @@ export class CfTempEmailAdapter implements UpstreamAdapter {
         message: `上游地址簿中未找到 ${ref.address}（可能已删除，或该实例的 query 未命中）`,
       });
     }
-    await upstreamSend(
+    const res = await upstreamSend(
       this.deps, cfg, `${base}/admin/delete_address/${addressId}`, "DELETE",
       this.adminHeaders(cfg), undefined, "/admin/delete_address",
     );
+    await res.body?.cancel();
   }
 
   /**
@@ -237,10 +243,11 @@ export class CfTempEmailAdapter implements UpstreamAdapter {
     // 只表示「语句执行了」——删不存在或别人的邮件同样返回 success:true。
     // 先确认这封信确实属于本邮箱，否则会跨邮箱删信并谎报成功。
     await this.fetchMail(cfg, ref, messageId);
-    await upstreamSend(
+    const res = await upstreamSend(
       this.deps, cfg, `${base}/admin/mails/${encodeURIComponent(messageId)}`, "DELETE",
       this.adminHeaders(cfg), undefined, "/admin/mails",
     );
+    await res.body?.cancel();
   }
 
   async getSource(cfg: UpstreamConfig, ref: MailboxRef, messageId: string): Promise<Uint8Array> {

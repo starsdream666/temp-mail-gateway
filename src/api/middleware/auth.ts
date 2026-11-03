@@ -35,6 +35,9 @@ export async function checkAdminPassword(password: string, config: AdminAuthConf
  *   X-API-Key / X-Admin-Auth / X-Gateway-Key
  */
 export function extractGatewayKey(c: Context): string {
+  // 显式网关身份允许与邮箱独立 Bearer 同时携带。
+  const explicit = c.req.header("x-gateway-key")?.trim();
+  if (explicit) return explicit;
   const auth = (c.req.header("Authorization") ?? "").trim();
   if (auth) {
     const bearer = /^Bearer\s+(.+)$/i.exec(auth);
@@ -79,6 +82,7 @@ export function requirePassthroughKey(apiKeys: ApiKeyStore, admin: AdminAuthConf
       const row = await apiKeys.verify(await hashApiKey(key));
       if (row) {
         c.set("apiKey", row);
+        c.set("gatewayKey", key);
         await next();
         return;
       }

@@ -21,6 +21,7 @@ import {
   filterAfterCursor,
   parseUpstreamDate,
 } from "../_shared/http";
+import { createUpstreamFetch } from "../../../core/upstream-fetch";
 
 /**
  * YYDS Mail API 适配器（https://vip.215.im/docs，OpenAPI 规范见上游 /v1/openapi.json）。
@@ -99,12 +100,17 @@ const YYDS_CREATE_PATHS = new Set([
 
 export class YydsMailAdapter implements UpstreamAdapter {
   readonly type = "yydsmail";
+  readonly passthroughListPaths = ["/v1/domains"];
+  observesPassthrough(method: string, path: string): boolean {
+    return method === "POST" && YYDS_CREATE_PATHS.has(path)
+      || method === "DELETE" && /^\/v1\/accounts\/[^/]+$/.test(path);
+  }
 
   private readonly deps: UpstreamHttpDeps;
 
   constructor(deps: UpstreamAdapterDeps = {}) {
     this.deps = {
-      fetchFn: deps.fetchFn ?? ((input, init) => fetch(input as never, init)),
+      fetchFn: createUpstreamFetch(deps.fetchFn, deps.timeoutMs),
       logger: deps.logger,
     };
   }

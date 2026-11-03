@@ -310,7 +310,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       const upstream = await requireUpstream(stores.upstreams, row.upstreamId);
       const adapter = getAdapter(registry, upstream.type);
       const cfg = await upstreamConfigOf(upstream, crypto);
-      const ref = await mailboxRefOf(row, crypto);
+      const ref = await mailboxRefOf(row, crypto, stores.mailboxes);
 
       let upstreamDeleted = true;
       let upstreamError: { code: string; message: string } | undefined;
@@ -319,7 +319,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       } catch (err) {
         const code = upstreamErrorCode(err);
         // 上游不支持删邮箱、或上游已经没有这个邮箱 → 网关记录照删（幂等），不需要 force
-        const benign = code === "CAPABILITY_MISSING" || code === "NOT_FOUND";
+        const benign = code === "NOT_FOUND" || (code === "CAPABILITY_MISSING" && !adapter.requiresMailboxCredentials);
         if (!benign) {
           if (!forced) throw err;
           if (adapter.requiresMailboxCredentials) {
@@ -386,7 +386,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       const upstream = await requireUpstream(stores.upstreams, row.upstreamId);
       const adapter = getAdapter(registry, upstream.type);
       const cfg = await upstreamConfigOf(upstream, crypto);
-      const ref = await mailboxRefOf(row, crypto);
+      const ref = await mailboxRefOf(row, crypto, stores.mailboxes);
       const messages = await adapter.listMessages(cfg, ref, { since });
       return c.json({ messages: messages.map(presentMessageSummary) }, 200);
     },
@@ -417,7 +417,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       const upstream = await requireUpstream(stores.upstreams, row.upstreamId);
       const adapter = getAdapter(registry, upstream.type);
       const cfg = await upstreamConfigOf(upstream, crypto);
-      const ref = await mailboxRefOf(row, crypto);
+      const ref = await mailboxRefOf(row, crypto, stores.mailboxes);
       const message = await adapter.getMessage(cfg, ref, mid);
       return c.json({ message: presentMessageDetail(message) }, 200);
     },
@@ -446,7 +446,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       const adapter = getAdapter(registry, upstream.type);
       if (!adapter.deleteMessage) throw new AppError("CAPABILITY_MISSING", "该上游不支持删除消息");
       const cfg = await upstreamConfigOf(upstream, crypto);
-      const ref = await mailboxRefOf(row, crypto);
+      const ref = await mailboxRefOf(row, crypto, stores.mailboxes);
       await adapter.deleteMessage(cfg, ref, mid);
       return c.body(null, 204);
     },
@@ -478,7 +478,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       const adapter = getAdapter(registry, upstream.type);
       if (!adapter.getSource) throw new AppError("CAPABILITY_MISSING", "该上游不支持原始报文");
       const cfg = await upstreamConfigOf(upstream, crypto);
-      const ref = await mailboxRefOf(row, crypto);
+      const ref = await mailboxRefOf(row, crypto, stores.mailboxes);
       const source = await adapter.getSource(cfg, ref, mid);
       const buf = source.buffer.slice(
         source.byteOffset,
@@ -547,18 +547,22 @@ export async function upstreamConfigOf(
 }
 
 export async function mailboxRefOf(row: {
+  id?: string;
   upstreamMailboxId: string;
   address: string;
   credentialsEnc: string | null;
   passwordEnc: string | null;
   expiresAt: Date | null;
-}, crypto: CryptoPort): Promise<MailboxRef> {
+}, crypto: CryptoPort, mailboxes?: MailboxStore): Promise<MailboxRef> {
   return {
     upstreamMailboxId: row.upstreamMailboxId,
     address: row.address,
     credentials: row.credentialsEnc ? await crypto.decrypt(row.credentialsEnc) : undefined,
     password: row.passwordEnc ? await crypto.decrypt(row.passwordEnc) : undefined,
     expiresAt: row.expiresAt ?? undefined,
+    onCredentialsChanged: row.id && mailboxes ? async (credentials) => {
+      await mailboxes.updateCredentials(row.id!, { credentialsEnc: await crypto.encrypt(credentials) });
+    } : undefined,
   };
 }
 

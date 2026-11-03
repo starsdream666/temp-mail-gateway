@@ -132,26 +132,34 @@ export async function runHealthSweep(
   const globalIntervalMs = settings?.healthCheckIntervalMs ?? opts?.globalIntervalMs;
   const now = opts?.now ?? Date.now();
   const instances = await deps.upstreams.listEnabled();
-  const outcomes: HealthCheckOutcome[] = [];
+  const due: UpstreamRow[] = [];
   for (const row of instances) {
     const effective = effectiveMonitorIntervalMs(row.settingsJson, globalIntervalMs);
     if (effective === null) continue; // 该渠道关闭监控
     const last = await deps.health.listByUpstream(row.id, 1);
     const lastAt = last[0]?.checkedAt.getTime() ?? 0;
     if (now - lastAt < effective) continue; // 未到期
-    outcomes.push(await checkOne(deps, row));
+    due.push(row);
   }
-  return outcomes;
+  return checkWithConcurrency(deps, due);
 }
 
 /** 执行一轮全渠道健康检查，结果落库并返回（供状态页与日志使用） */
 export async function runHealthChecks(deps: MonitorDeps): Promise<HealthCheckOutcome[]> {
   const instances = await deps.upstreams.listEnabled();
-  const outcomes: HealthCheckOutcome[] = [];
-  // 顺序执行：渠道数量有限，避免并发探测对上游造成瞬时压力
-  for (const row of instances) {
-    outcomes.push(await checkOne(deps, row));
-  }
+  return checkWithConcurrency(deps, instances);
+}
+
+/** Slow probes occupy at most one of three slots, while results retain instance order. */
+async function checkWithConcurrency(deps: MonitorDeps, rows: UpstreamRow[]): Promise<HealthCheckOutcome[]> {
+  const outcomes: HealthCheckOutcome[] = new Array(rows.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(3, rows.length) }, async () => {
+    while (next < rows.length) {
+      const index = next++;
+      outcomes[index] = await checkOne(deps, rows[index]!);
+    }
+  }));
   return outcomes;
 }
 

@@ -49,7 +49,7 @@ export const mailboxes = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
-  (t) => [index("mailboxes_upstream_idx").on(t.upstreamId), index("mailboxes_created_idx").on(t.createdAt), index("mailboxes_expires_idx").on(t.expiresAt)],
+  (t) => [index("mailboxes_upstream_idx").on(t.upstreamId), index("mailboxes_created_idx").on(t.createdAt), index("mailboxes_expires_idx").on(t.expiresAt), index("mailboxes_key_created_idx").on(t.apiKeyId, t.createdAt)],
 );
 
 export const apiKeys = sqliteTable("api_keys", {

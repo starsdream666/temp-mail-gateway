@@ -144,6 +144,7 @@ export interface MailboxStore {
   findByAddress(address: string): Promise<MailboxRow | null>;
   /** 透传副作用注销用：定位某个上游实例下的指定邮箱 */
   findByUpstreamMailboxId(upstreamId: string, upstreamMailboxId: string): Promise<MailboxRow | null>;
+  updateCredentials(id: string, patch: { credentialsEnc?: string; passwordEnc?: string }): Promise<void>;
   delete(id: string): Promise<void>;
   /** 清理 expiresAt <= now 的网关侧记录（不触碰上游），返回删除条数。 */
   deleteExpired(now: Date): Promise<number>;

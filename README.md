@@ -341,12 +341,17 @@ curl -X POST http://localhost:8787/upstream/moemail/api/emails/generate \
 | 场景 | 行为 |
 |---|---|
 | 该类型只有一个启用实例 | 全部请求直接转发到它 |
+| GET/HEAD 携带已登记邮箱的完整地址，或路径含可解析的邮箱 ID | 优先转发到注册表记载的所属实例，避免共享域名读错账户；所属实例不可用时返回错误，不切换账户 |
 | 非 DELETE 请求携带域名（body 的 `domain`/`address` 字段，或 query 中形如邮箱的 `address`/`query` 参数） | 路由到拥有该域名且开启透传的实例；body 同时带 `domain` 和 `address` 时域名必须一致 |
 | GET 且无域名（如列出全部邮箱） | 扇出到开启透传的候选实例并**合并**结果（数组字段拼接），`X-Gateway-Merged-Upstreams` 标记参与数 |
 | DELETE（如按 UUID 删邮箱） | 优先用已登记邮箱的 ID/地址确定唯一归属，其次使用唯一域名归属；无法确定或多个实例均匹配时返回 400 `UPSTREAM_REQUIRED`，不会发送删除请求。此时需改用 `/upstream/{上游ID}` |
 | POST/PUT/PATCH 且无域名 | 400 `DOMAIN_REQUIRED`（避免一次请求在多个实例重复创建） |
 
 其他规则：
+
+- MoeMail 多实例 `GET /api/emails` 使用网关聚合游标：直接把返回的 `nextCursor` 传回即可，每个渠道分别翻页，`total` 为各渠道总数之和。某渠道本页失败时整页返回错误，重试相同游标；实例或查询条件改变后应重新获取首页。按上游 ID 调用时保留原生游标。
+- DuckMail 原生消息接口需要同时传 `X-Gateway-Key: <网关Key>` 和 `Authorization: Bearer <邮箱token>`；管理员会话可替代前者。邮箱 token 只转发到 DuckMail 明确支持的邮箱操作端点。透传建箱时密码加密保存，`POST /token` 成功后同步保存凭证；统一 API 刷新 token 后也会加密回写。旧版缺少凭证的记录必须先成功登录补全，删除失败会保留记录。
+- 上游请求有 30 秒时限，包含响应头和正文读取；透传支持客户端取消。无需过滤的单实例响应直接流式转发；需要过滤、观察或合并的每份响应最多缓冲 4 MiB，超限返回错误。健康巡检最多并行检查 3 个渠道。
 
 - **鉴权形式兼容**（主 API 与透传一致）：网关 key 可通过 `Authorization: Bearer <key>`、`Authorization: <key>`（裸值）、`X-API-Key`、`X-Admin-Auth`、`X-Gateway-Key` 任一请求头携带；
 - 透传额外接受**管理员会话 cookie**——原生客户端（如浏览器扩展）从登录过管理后台的同一浏览器发起时，往往一个 key 头都不带（例如探测上游公开端点 `/open_api/settings`），管理员本人视同可信；
@@ -398,7 +403,7 @@ frontend/          # 管理后台 SPA（React + Vite），构建产物 dist/ 由
 ## 已知边界
 
 - 不持久化消息（实时从上游代理）；webhook、附件代理为二期（`mailboxes.webhookUrl` 已占位）。**上游原生透传已实现**（见上文 passthrough 章节）。
-- 邮箱 `expiresAt` 已存储但无过期清理任务（上游到期自行清理后，网关记录会累积，管理端邮箱概览可见僵尸行）。
+- 邮箱过期记录可在全局设置中开启自动清理，默认关闭；清理只操作网关记录。
 - `/v1` 邮箱已做归属隔离（key A 建的邮箱 key B 读/删返回 404；透传自动登记的共享邮箱除外）。
 - 出口 IP 可能被上游 WAF 拦截；适配器的 `fetchFn` 注入点已为代理预留。
 - 限速为单实例内存计数（Workers 下按 isolate 计），多实例部署需换共享存储；登录限速在生产应置于注入真实客户端 IP 的反代之后（见 `clientKeyOf`）。

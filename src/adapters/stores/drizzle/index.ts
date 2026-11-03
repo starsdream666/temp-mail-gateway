@@ -246,6 +246,9 @@ export function createDrizzleStores(
   };
 
   const mailboxStore: MailboxStore = {
+    async updateCredentials(id, patch) {
+      await db.update(s.mailboxes).set(patch).where(eq(s.mailboxes.id, id));
+    },
     async create(input: NewMailbox): Promise<MailboxRow> {
       const rows = await db
         .insert(s.mailboxes)

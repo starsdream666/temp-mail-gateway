@@ -42,6 +42,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm --prefix frontend ci --no-audit --no-fund
       - run: npm run typecheck
+      - run: npm run test:regression
       - run: npm run frontend:build
 
   docker:

@@ -33,6 +33,8 @@ export interface MailboxRef {
   credentials?: string;
   password?: string;
   expiresAt?: Date;
+  /** 网关注入的持久化回调；适配器刷新 token 后调用。 */
+  onCredentialsChanged?: (credentials: string) => Promise<void>;
 }
 
 export interface MessageSummary {
@@ -96,6 +98,7 @@ export interface ListMessagesOptions {
 export interface UpstreamAdapterDeps {
   /** 出网请求统一走这里，便于测试录制回放与将来接代理 */
   fetchFn?: typeof fetch;
+  timeoutMs?: number;
   logger?: (level: "info" | "warn" | "error", message: string, meta?: unknown) => void;
 }
 
@@ -150,6 +153,14 @@ export interface UpstreamAdapter {
    * cfg.apiKey 已解密。
    */
   authHeaders?(cfg: UpstreamConfig): Record<string, string>;
+  /** 仅邮箱独立凭证端点可接受客户端的邮箱 Bearer，网关凭证仍被剥离。 */
+  passthroughMailboxAuth?(path: string, method: string, token: string): Record<string, string>;
+  /** 在读响应体之前声明需要列表过滤的路径。 */
+  passthroughListPaths?: readonly string[];
+  /** 多实例时必须保留各实例独立 cursor 的列表端点。 */
+  passthroughCursorPaths?: readonly string[];
+  /** 在读响应体之前声明需要观察的操作。 */
+  observesPassthrough?(method: string, path: string): boolean;
 
   /** 从原生删除路径提取所属邮箱 ID；不含邮箱 ID 的路径返回 null。 */
   passthroughMailboxId?(path: string): string | null;
@@ -188,6 +199,7 @@ export interface PassthroughInspectInput {
 
 export type PassthroughObservation =
   | { action: "created"; ref: MailboxRef }
+  | { action: "authenticated"; ref: MailboxRef }
   | { action: "deleted"; upstreamMailboxId: string };
 
 /** 注册表条目的展示元数据，供管理端表单使用 */

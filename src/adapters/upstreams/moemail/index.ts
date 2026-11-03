@@ -21,6 +21,7 @@ import {
   randomLocalPart,
   parseUpstreamDate,
 } from "../_shared/http";
+import { createUpstreamFetch } from "../../../core/upstream-fetch";
 
 /**
  * MoeMail（beilunyang/moemail）API 适配器。
@@ -89,12 +90,18 @@ interface MoeMailboxListPage {
 
 export class MoeMailAdapter implements UpstreamAdapter {
   readonly type = "moemail";
+  readonly passthroughListPaths = ["/api/config", "/api/emails"];
+  readonly passthroughCursorPaths = ["/api/emails"];
+  observesPassthrough(method: string, path: string): boolean {
+    return method === "POST" && path === "/api/emails/generate"
+      || method === "DELETE" && /^\/api\/emails\/[^/]+$/.test(path);
+  }
 
   private readonly deps: UpstreamHttpDeps;
 
   constructor(deps: UpstreamAdapterDeps = {}) {
     this.deps = {
-      fetchFn: deps.fetchFn ?? ((input, init) => fetch(input as never, init)),
+      fetchFn: createUpstreamFetch(deps.fetchFn, deps.timeoutMs),
       logger: deps.logger,
     };
   }
@@ -159,10 +166,11 @@ export class MoeMailAdapter implements UpstreamAdapter {
   async deleteMailbox(cfg: UpstreamConfig, ref: MailboxRef): Promise<void> {
     const apiKey = requireApiKey(cfg, "X-API-Key");
     const base = stripTrailingSlash(cfg.baseUrl);
-    await upstreamSend(
+    const res = await upstreamSend(
       this.deps, cfg, `${base}/api/emails/${encodeURIComponent(ref.upstreamMailboxId)}`, "DELETE",
       { "X-API-Key": apiKey }, undefined, "/api/emails",
     );
+    await res.body?.cancel();
   }
 
   async listMessages(
@@ -251,12 +259,13 @@ export class MoeMailAdapter implements UpstreamAdapter {
   async deleteMessage(cfg: UpstreamConfig, ref: MailboxRef, messageId: string): Promise<void> {
     const apiKey = requireApiKey(cfg, "X-API-Key");
     const base = stripTrailingSlash(cfg.baseUrl);
-    await upstreamSend(
+    const res = await upstreamSend(
       this.deps, cfg,
       `${base}/api/emails/${encodeURIComponent(ref.upstreamMailboxId)}/${encodeURIComponent(messageId)}`,
       "DELETE",
       { "X-API-Key": apiKey }, undefined, "/api/emails/{id}/{messageId}",
     );
+    await res.body?.cancel();
   }
 
   authHeaders(cfg: UpstreamConfig): Record<string, string> {

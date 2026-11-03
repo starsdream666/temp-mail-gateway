@@ -22,6 +22,7 @@ import {
   networkError,
   upstreamHttpError,
 } from "../_shared/http";
+import { createUpstreamFetch } from "../../../core/upstream-fetch";
 
 /**
  * DuckMail API 适配器（文档：仓库 public/llm-api-docs.txt，Base URL https://api.duckmail.sbs）。
@@ -63,6 +64,18 @@ interface DuckMailMessage {
 
 export class DuckMailAdapter implements UpstreamAdapter {
   readonly type = "duckmail";
+  readonly passthroughListPaths = ["/domains"];
+  observesPassthrough(method: string, path: string): boolean {
+    return method === "POST" && (path === "/accounts" || path === "/token")
+      || method === "DELETE" && /^\/accounts\/[^/]+$/.test(path);
+  }
+
+  passthroughMailboxAuth(path: string, method: string, token: string): Record<string, string> {
+    const message = /^\/(messages|sources)(\/[^/]+)?$/.test(path);
+    const account = /^\/accounts\/[^/]+$/.test(path) || path === "/me";
+    return (message || account) && ["GET", "HEAD", "DELETE", "PATCH"].includes(method)
+      ? { Authorization: `Bearer ${token}` } : {};
+  }
 
   /**
    * 邮箱操作依赖每邮箱独立凭证：密码在建箱时随机生成、只以密文存在网关库里。
@@ -76,7 +89,7 @@ export class DuckMailAdapter implements UpstreamAdapter {
 
   constructor(deps: UpstreamAdapterDeps = {}) {
     this.deps = {
-      fetchFn: deps.fetchFn ?? ((input, init) => fetch(input as never, init)),
+      fetchFn: createUpstreamFetch(deps.fetchFn, deps.timeoutMs),
       logger: deps.logger,
     };
   }
@@ -155,13 +168,14 @@ export class DuckMailAdapter implements UpstreamAdapter {
   }
 
   async deleteMailbox(cfg: UpstreamConfig, ref: MailboxRef): Promise<void> {
-    await this.withMailboxAuth(cfg, ref, (token) =>
+    const res = await this.withMailboxAuth(cfg, ref, (token) =>
       upstreamSend(
         this.deps, cfg,
         `${stripTrailingSlash(cfg.baseUrl)}/accounts/${encodeURIComponent(ref.upstreamMailboxId)}`,
         "DELETE", { Authorization: `Bearer ${token}` }, undefined, "/accounts",
       ),
     );
+    await res.body?.cancel();
   }
 
   async listMessages(
@@ -213,13 +227,14 @@ export class DuckMailAdapter implements UpstreamAdapter {
   }
 
   async deleteMessage(cfg: UpstreamConfig, ref: MailboxRef, messageId: string): Promise<void> {
-    await this.withMailboxAuth(cfg, ref, (token) =>
+    const res = await this.withMailboxAuth(cfg, ref, (token) =>
       upstreamSend(
         this.deps, cfg,
         `${stripTrailingSlash(cfg.baseUrl)}/messages/${encodeURIComponent(messageId)}`,
         "DELETE", { Authorization: `Bearer ${token}` }, undefined, "/messages",
       ),
     );
+    await res.body?.cancel();
   }
 
   async getSource(cfg: UpstreamConfig, ref: MailboxRef, messageId: string): Promise<Uint8Array> {
@@ -250,9 +265,19 @@ export class DuckMailAdapter implements UpstreamAdapter {
   inspectPassthrough(input: PassthroughInspectInput): PassthroughObservation | null {
     if (input.status < 200 || input.status >= 300) return null;
 
+    if (input.method === "POST" && input.path === "/token") {
+      try {
+        const req = JSON.parse(input.requestBodyText ?? "{}") as { address?: string; password?: string };
+        const res = JSON.parse(input.responseBodyText ?? "{}") as { id?: string; token?: string };
+        if (!req.address || !res.token) return null;
+        return { action: "authenticated", ref: { address: req.address, upstreamMailboxId: res.id ?? req.address,
+          credentials: res.token, password: req.password } };
+      } catch { return null; }
+    }
+
     if (input.method === "POST" && input.path === "/accounts") {
       try {
-        const req = JSON.parse(input.requestBodyText ?? "{}") as { address?: string; expiresIn?: number };
+        const req = JSON.parse(input.requestBodyText ?? "{}") as { address?: string; password?: string; expiresIn?: number };
         const res = JSON.parse(input.responseBodyText ?? "{}") as { id?: string; address?: string };
         const address = (res.address ?? req.address ?? "").toLowerCase();
         if (!address.includes("@")) return null;
@@ -268,7 +293,7 @@ export class DuckMailAdapter implements UpstreamAdapter {
           ref: {
             upstreamMailboxId: res.id ?? address,
             address,
-            credentials: undefined, // 透传建箱的 token 由客户端持有，网关侧无凭证
+            password: req.password,
             expiresAt,
           },
         };
@@ -311,7 +336,7 @@ export class DuckMailAdapter implements UpstreamAdapter {
   /**
    * 消息面一律走「当前 token → 401 则用密码换新 token 再试一次」。
    * 建箱时 /token 失败、或上游 token 过期，只要 password 还在就能自愈。
-   * 新 token 只写回本次 ref（进程内），不回写网关库——下一次请求若再 401 会再换一次。
+   * 新 token 通过网关注入的回调加密回写，后续请求不再重复使用失效 token。
    */
   private async withMailboxAuth<T>(
     cfg: UpstreamConfig,
@@ -327,6 +352,7 @@ export class DuckMailAdapter implements UpstreamAdapter {
       }
       token = await this.fetchMailboxToken(cfg, ref.address, ref.password);
       ref.credentials = token;
+      await ref.onCredentialsChanged?.(token);
     }
     try {
       return await run(token);
@@ -334,6 +360,7 @@ export class DuckMailAdapter implements UpstreamAdapter {
       if (!(err instanceof UpstreamError) || err.code !== "AUTH_FAILED" || !ref.password) throw err;
       token = await this.fetchMailboxToken(cfg, ref.address, ref.password);
       ref.credentials = token;
+      await ref.onCredentialsChanged?.(token);
       return await run(token);
     }
   }

@@ -11,6 +11,7 @@ import type { UpstreamRow, UpstreamWithDomain } from "../ports/stores";
 import { AppError } from "../core/errors";
 import { newId } from "../core/ids";
 import { limitKeyConcurrency, type ConcurrencyLimiter } from "../core/concurrency";
+import { createUpstreamFetch, readBoundedText } from "../core/upstream-fetch";
 
 export interface PassthroughDeps {
   stores: GatewayStores;
@@ -78,7 +79,7 @@ const EMAIL_IN_PARAM = /^[A-Za-z0-9._-]+@([A-Za-z0-9-]+\.[A-Za-z0-9.-]+)$/;
  * 经透传创建/删除的邮箱由 inspectPassthrough 自动登记/注销到网关注册表。
  */
 export function registerPassthroughRoutes(app: OpenAPIHono<Env>, deps: PassthroughDeps): void {
-  const fetchFn = deps.fetchFn ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+  const fetchFn = createUpstreamFetch(deps.fetchFn);
 
   app.use("/upstream/*", requirePassthroughKey(deps.stores.apiKeys, deps.admin));
   app.use("/upstream/*", limitKeyConcurrency(deps.concurrencyLimiter));
@@ -103,10 +104,12 @@ export function registerPassthroughRoutes(app: OpenAPIHono<Env>, deps: Passthrou
     // S-04：写请求的候选行只查一次，预检与类型路由共用；GET/DELETE 惰性——只有
     // 多实例类型路由需要候选时才查（extractDomain 对它们只是取个可能用不上的值）。
     let candidates: UpstreamWithDomain[] | null = null;
-    if (isWriteMethod(method) && domain) {
+    // DuckMail /token is mailbox login, not mailbox creation. Domain switches must not block it.
+    const domainWrite = isWriteMethod(method) && subPath !== "/token";
+    if (domainWrite && domain) {
       candidates = await deps.stores.upstreams.listUpstreamsByDomain(domain);
     }
-    if (isWriteMethod(method)) {
+    if (domainWrite) {
       await assertDomainAllowed(c, deps, domain, candidates);
     }
 
@@ -114,7 +117,8 @@ export function registerPassthroughRoutes(app: OpenAPIHono<Env>, deps: Passthrou
     const byId = (await deps.stores.upstreams.get(typeOrId)) ?? (await deps.stores.upstreams.get(typeOrId.toUpperCase()));
     if (byId) {
       assertForwardable(byId, deps.registry);
-      if (isWriteMethod(method)) {
+      if (domainWrite || (isWriteMethod(method) && byId.type !== "duckmail")) {
+        if (!domainWrite) await assertDomainAllowed(c, deps, domain);
         assertChannelAllowed(c, byId.id);
         await assertTargetDomainEnabled(deps, byId.id, domain);
       }
@@ -130,16 +134,33 @@ export function registerPassthroughRoutes(app: OpenAPIHono<Env>, deps: Passthrou
       }
       // 类型寻址 = 让网关替调用方选实例 → 候选先按 key 渠道白名单收窄（读写都收）
       const instances = narrowToAllowedChannels(c, enabledOfType);
+      if (!domainWrite && isWriteMethod(method) && type !== "duckmail") await assertDomainAllowed(c, deps, domain);
       if (instances.length === 0) {
         throw new AppError(
           "CHANNEL_NOT_ALLOWED",
           `当前 key 无权使用 ${type} 类型下的任何渠道，请联系管理员调整该 key 的渠道白名单（或改用 /upstream/{上游ID} 指定具体实例）`,
         );
       }
+      const mailboxLogin = type === "duckmail" && method === "POST" && subPath === "/token";
+      if (["GET", "HEAD", "DELETE"].includes(method) || mailboxLogin) {
+        let loginAddress: string | undefined;
+        if (mailboxLogin && bodyBuf && bodyBuf.byteLength <= 1_000_000) {
+          try {
+            const parsed = JSON.parse(new TextDecoder().decode(bodyBuf)) as { address?: unknown };
+            if (typeof parsed.address === "string") loginAddress = parsed.address.trim().toLowerCase();
+          } catch { /* Invalid login bodies remain the upstream's validation responsibility. */ }
+        }
+        const owner = await registeredMailboxOwner(c, deps, type, instances, subPath, loginAddress);
+        if (owner) return forwardSingle(c, deps, fetchFn, owner, subPath, bodyBuf, { "X-Gateway-Upstream-Id": owner.id });
+      }
       if (instances.length === 1) {
         const only = instances[0]!;
+        if (new URL(c.req.url).searchParams.get("cursor")?.startsWith("tmg1.")) {
+          return fanOutCursorPage(c, deps, fetchFn, instances, subPath);
+        }
         assertForwardable(only, deps.registry);
-        if (isWriteMethod(method)) {
+        if (domainWrite || (isWriteMethod(method) && type !== "duckmail")) {
+          if (!domainWrite) await assertDomainAllowed(c, deps, domain);
           assertChannelAllowed(c, only.id);
           await assertTargetDomainEnabled(deps, only.id, domain);
         }
@@ -288,13 +309,6 @@ async function handleTypeRouting(
     throw new AppError("FORBIDDEN", `该类型下可用渠道均未启用原生格式透传`);
   }
 
-  if (method === "DELETE") {
-    const owner = await registeredDeleteOwner(c, deps, type, instances, subPath);
-    if (owner) {
-      return forwardSingle(c, deps, fetchFn, owner, subPath, bodyBuf, { "X-Gateway-Upstream-Id": owner.id });
-    }
-  }
-
   if (domain) {
     // R-03：类型寻址的域名路由要在「该类型自己的登记行」里选主——全局主归属可能
     // 是更早创建的其他类型渠道，拿它比 type 会误拒本类型合法拥有的共享域名。
@@ -323,7 +337,7 @@ async function handleTypeRouting(
     if (usable.length === 0) {
       throw new AppError("FORBIDDEN", `域名 ${domain} 的渠道未启用原生格式透传`);
     }
-    if (isWriteMethod(method)) {
+    if (isWriteMethod(method) && !(type === "duckmail" && subPath === "/token")) {
       usable = usable.filter((r) => r.domainEnabled);
       if (usable.length === 0) {
         // 有启用的类型实例但域名全停 → 域名开关拦（S-02 语义：与上游停用分开归因）
@@ -331,7 +345,7 @@ async function handleTypeRouting(
       }
     }
     const owner = usable[0]!;
-    if (isWriteMethod(method)) {
+    if (isWriteMethod(method) && !(type === "duckmail" && subPath === "/token")) {
       assertChannelAllowed(c, owner.id);
       await assertTargetDomainEnabled(deps, owner.id, domain);
     }
@@ -353,15 +367,16 @@ async function handleTypeRouting(
 }
 
 function upstreamRequired(type: string): AppError {
-  return new AppError("UPSTREAM_REQUIRED", `无法确定 DELETE 请求在 ${type} 下的唯一归属，请改用 /upstream/{上游ID}`);
+  return new AppError("UPSTREAM_REQUIRED", `无法确定请求在 ${type} 下的唯一归属，请改用 /upstream/{上游ID}`);
 }
 
-async function registeredDeleteOwner(
+async function registeredMailboxOwner(
   c: Context<Env>,
   deps: PassthroughDeps,
   type: string,
   instances: UpstreamRow[],
   subPath: string,
+  addressArg?: string,
 ): Promise<UpstreamRow | null> {
   let mailboxId: string | null;
   try {
@@ -369,7 +384,7 @@ async function registeredDeleteOwner(
   } catch {
     throw new AppError("VALIDATION_ERROR", "邮箱路径编码无效");
   }
-  const address = queryAddress(c);
+  const address = addressArg ?? queryAddress(c);
   if (address) {
     const mailbox = await deps.stores.mailboxes.findByAddress(address);
     if (mailbox) {
@@ -456,12 +471,13 @@ async function forwardSingle(
 
   // 透传副作用观察：原生客户端创建/删除邮箱时自动登记/注销到网关注册表（管理端可见可管理）。
   // DELETE 204 没有 JSON 响应体，但仍需要注销；观察失败不影响透传本身。
-  const shouldObserve = ((method === "POST" || method === "DELETE") && isJson2xx) ||
-    (method === "DELETE" && res.status === 204);
+  const adapter = deps.registry.get(row.type);
+  const shouldObserve = (adapter.observesPassthrough?.(method, subPath) ?? typeof adapter.inspectPassthrough === "function") && (((method === "POST" || method === "DELETE") && isJson2xx) ||
+    (method === "DELETE" && res.status === 204));
   if (shouldObserve && bodyBufOrEmpty(bodyBuf) <= 1_000_000) {
-    let responseBodyText = "";
+    // Read errors must not turn a truncated body into a successful empty response.
+    const responseBodyText = await readBoundedText(res);
     try {
-      responseBodyText = await res.text();
       await recordPassthroughObservation(deps, row, {
         method,
         path: subPath,
@@ -491,7 +507,8 @@ async function maybeFilterListBody(
   res: Response,
 ): Promise<string | null> {
   const adapter = deps.registry.get(row.type);
-  if (typeof adapter.filterPassthroughList !== "function") return null;
+  if (typeof adapter.filterPassthroughList !== "function"
+    || (adapter.passthroughListPaths && !adapter.passthroughListPaths.includes(subPath))) return null;
 
   const apiKey = c.get("apiKey");
   const activeRows = await deps.stores.upstreams.listActiveDomains();
@@ -506,7 +523,7 @@ async function maybeFilterListBody(
     ).map((r) => r.domain),
   );
 
-  const responseBodyText = await res.text();
+  const responseBodyText = await readBoundedText(res);
   return (
     adapter.filterPassthroughList({
       path: subPath,
@@ -537,6 +554,17 @@ async function recordPassthroughObservation(
   const observation = adapter.inspectPassthrough(input);
   if (!observation) return;
 
+  if (observation.action === "authenticated") {
+    const existing = await deps.stores.mailboxes.findByAddress(observation.ref.address.trim().toLowerCase());
+    if (existing?.upstreamId === row.id && observation.ref.credentials) {
+      await deps.stores.mailboxes.updateCredentials(existing.id, {
+        credentialsEnc: await deps.crypto.encrypt(observation.ref.credentials),
+        ...(observation.ref.password ? { passwordEnc: await deps.crypto.encrypt(observation.ref.password) } : {}),
+      });
+    }
+    return;
+  }
+
   if (observation.action === "created") {
     const address = observation.ref.address.trim().toLowerCase();
     if (!address.includes("@")) return;
@@ -551,7 +579,7 @@ async function recordPassthroughObservation(
       domain: domain!,
       upstreamMailboxId: observation.ref.upstreamMailboxId,
       credentialsEnc: observation.ref.credentials ? await deps.crypto.encrypt(observation.ref.credentials) : null,
-      passwordEnc: null,
+      passwordEnc: observation.ref.password ? await deps.crypto.encrypt(observation.ref.password) : null,
       apiKeyId: null,
       expiresAt: observation.ref.expiresAt ?? null,
     });
@@ -569,13 +597,14 @@ async function forwardRaw(
   row: UpstreamRow,
   subPath: string,
   bodyBuf: ArrayBuffer | undefined,
+  searchOverride?: string,
 ): Promise<Response> {
   assertForwardable(row, deps.registry);
   const base = new URL(row.baseUrl);
   const incoming = new URL(c.req.raw.url);
   const target = new URL(base.toString());
   target.pathname = `${base.pathname.replace(/\/+$/, "")}${subPath || "/"}`;
-  target.search = incoming.search;
+  target.search = searchOverride ?? incoming.search;
 
   const headers = new Headers();
   c.req.raw.headers.forEach((value, key) => {
@@ -588,12 +617,19 @@ async function forwardRaw(
   }
 
   const method = c.req.method.toUpperCase();
+  const mailboxToken = /^Bearer\s+(.+)$/i.exec(c.req.header("Authorization") ?? "")?.[1]?.trim();
+  // Only an adapter's explicit mailbox endpoints can receive an independent mailbox token.
+  // Gateway keys are always stripped, even if supplied in both header forms.
+  if (mailboxToken && mailboxToken !== c.get("gatewayKey") && !/^tmg_/i.test(mailboxToken)) {
+    for (const [key, value] of Object.entries(adapter.passthroughMailboxAuth?.(subPath, method, mailboxToken) ?? {})) headers.set(key, value);
+  }
   try {
     return await fetchFn(target.toString(), {
       method,
       headers,
       body: method !== "GET" && method !== "HEAD" ? (bodyBuf ?? new ArrayBuffer(0)) : undefined,
       redirect: "manual",
+      signal: c.req.raw.signal,
     });
   } catch (cause) {
     throw new AppError("UPSTREAM_ERROR", `透传请求失败（${row.name}）：${(cause as Error)?.message ?? String(cause)}`);
@@ -608,6 +644,13 @@ async function fanOutGet(
   instances: UpstreamRow[],
   subPath: string,
 ): Promise<Response> {
+  if (instances.length === 1 && !new URL(c.req.url).searchParams.get("cursor")?.startsWith("tmg1.")) {
+    const only = instances[0]!;
+    return forwardSingle(c, deps, fetchFn, only, subPath, undefined, { "X-Gateway-Upstream-Id": only.id });
+  }
+  if (c.req.method === "GET" && deps.registry.get(instances[0]!.type).passthroughCursorPaths?.includes(subPath)) {
+    return fanOutCursorPage(c, deps, fetchFn, instances, subPath);
+  }
   const results = await Promise.allSettled(
     instances.map(async (row) => {
       const res = await forwardRaw(c, deps, fetchFn, row, subPath, undefined);
@@ -627,6 +670,74 @@ async function fanOutGet(
 }
 
 type FanOutEntry = PromiseSettledResult<{ row: UpstreamRow; res: Response }>;
+
+interface CursorState {
+  scope: string;
+  cursors: Record<string, string | null>;
+  totals: Record<string, number>;
+}
+
+/** Each upstream owns its cursor; exhausted instances are never restarted. */
+async function fanOutCursorPage(
+  c: Context<Env>, deps: PassthroughDeps, fetchFn: typeof fetch, instances: UpstreamRow[], subPath: string,
+): Promise<Response> {
+  const query = new URL(c.req.url).searchParams;
+  const cursor = query.get("cursor");
+  query.delete("cursor");
+  query.sort();
+  const key = c.get("apiKey");
+  const scope = JSON.stringify([subPath, query.toString(), instances.map(r => r.id).sort(), key.id, key.domains, key.channels]);
+  let state: CursorState = { scope, cursors: Object.fromEntries(instances.map(r => [r.id, ""])), totals: {} };
+  if (cursor) {
+    try {
+      if (!cursor.startsWith("tmg1.") || cursor.length > 65_536) throw new Error();
+      const bytes = Uint8Array.from(atob(cursor.slice(5)), ch => ch.charCodeAt(0));
+      const parsed = JSON.parse(new TextDecoder().decode(bytes)) as CursorState;
+      if (parsed.scope !== scope || !parsed.cursors || !parsed.totals
+        || Object.keys(parsed.cursors).length !== instances.length
+        || instances.some(r => !Object.hasOwn(parsed.cursors, r.id)
+          || !(parsed.cursors[r.id] === null || typeof parsed.cursors[r.id] === "string")
+          || !(typeof parsed.totals[r.id] === "number" && Number.isSafeInteger(parsed.totals[r.id]) && parsed.totals[r.id]! >= 0))) throw new Error();
+      state = parsed;
+    } catch { throw new AppError("VALIDATION_ERROR", "无效或已失效的聚合游标，请重新获取首页或指定上游 ID"); }
+  }
+  const active = instances.filter(r => state.cursors[r.id] !== null);
+  const pages = await Promise.allSettled(active.map(async row => {
+    const search = new URLSearchParams(query);
+    const previous = state.cursors[row.id];
+    if (previous) search.set("cursor", previous);
+    const res = await forwardRaw(c, deps, fetchFn, row, subPath, undefined, search.toString());
+    if (!res.ok) {
+      void res.body?.cancel().catch(() => {});
+      throw new AppError("UPSTREAM_ERROR", `渠道 ${row.name} 分页失败 (${res.status})，本页未提交，请重试`);
+    }
+    const text = await maybeFilterListBody(c, deps, row, subPath, res) ?? await readBoundedText(res);
+    const data = JSON.parse(text) as { emails?: unknown[]; nextCursor?: unknown; total?: unknown };
+    if (!Array.isArray(data.emails) || !(data.nextCursor === null || data.nextCursor === undefined || typeof data.nextCursor === "string")
+      || typeof data.total !== "number" || !Number.isSafeInteger(data.total) || data.total < 0) {
+      throw new AppError("UPSTREAM_ERROR", `渠道 ${row.name} 返回无效分页数据`);
+    }
+    if (previous && data.nextCursor === previous) throw new AppError("UPSTREAM_ERROR", `渠道 ${row.name} 的分页游标没有前进`);
+    return { row, data };
+  }));
+  const failure = pages.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  // A partial page cannot safely advance the compound cursor; let the caller retry the same page.
+  if (failure) throw failure.reason;
+  const emails: unknown[] = [];
+  for (const page of pages) {
+    if (page.status !== "fulfilled") continue;
+    const { row, data } = page.value;
+    emails.push(...data.emails!);
+    state.cursors[row.id] = typeof data.nextCursor === "string" && data.nextCursor ? data.nextCursor : null;
+    state.totals[row.id] = data.total as number;
+  }
+  const more = Object.values(state.cursors).some(value => value !== null);
+  const bytes = new TextEncoder().encode(JSON.stringify(state));
+  const nextCursor = more ? `tmg1.${btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""))}` : null;
+  return Response.json({ emails, nextCursor, total: Object.values(state.totals).reduce((sum, n) => sum + n, 0) }, {
+    headers: { "X-Gateway-Merged-Upstreams": String(instances.length), "X-Gateway-Upstream-Ids": instances.map(r => r.id).join(",") },
+  });
+}
 
 async function collectFanOut(
   results: FanOutEntry[],
@@ -676,7 +787,7 @@ async function collectFanOut(
   }
 
   // 多个成功：尝试 JSON 合并（数组字段拼接，标量取第一个）
-  const texts = await Promise.all(successes.map((s) => s.res.text()));
+  const texts = await Promise.all(successes.map((s) => readBoundedText(s.res)));
   const bodies: unknown[] = texts.map((t) => {
     try {
       return JSON.parse(t);

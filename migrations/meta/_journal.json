@@ -43,6 +43,30 @@
       "when": 1788606869787,
       "tag": "0005_regular_payback",
       "breakpoints": true
+    },
+    {
+      "idx": 6, "version": "6", "when": 1788606869788,
+      "tag": "0006_health_sync_action", "breakpoints": true
+    },
+    {
+      "idx": 7, "version": "6", "when": 1788606869789,
+      "tag": "0007_orphan_mailboxes", "breakpoints": true
+    },
+    {
+      "idx": 8, "version": "6", "when": 1788606869790,
+      "tag": "0008_api_key_rate_limit", "breakpoints": true
+    },
+    {
+      "idx": 9, "version": "6", "when": 1788606869791,
+      "tag": "0009_global_settings", "breakpoints": true
+    },
+    {
+      "idx": 10, "version": "6", "when": 1788606869792,
+      "tag": "0010_mailbox_auto_cleanup", "breakpoints": true
+    },
+    {
+      "idx": 11, "version": "6", "when": 1793664000000,
+      "tag": "0011_mailbox_key_index", "breakpoints": true
     }
   ]
 }

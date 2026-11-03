@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "test:regression": "node --import tsx --test scripts/regression-review.test.ts",
     "dev": "tsx watch src/entries/node.ts",
     "start": "tsx src/entries/node.ts",
     "frontend:install": "npm --prefix frontend install",

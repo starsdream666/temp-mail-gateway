@@ -11,19 +11,19 @@ import { createApp, type GatewayDeps } from "./core/app";
  */
 export function buildDeps(partial: Omit<GatewayDeps, "registry">): GatewayDeps {
   const registry = new AdapterRegistry();
-  registry.register(new CfTempEmailAdapter(), {
+  registry.register(new CfTempEmailAdapter({ fetchFn: partial.fetchFn }), {
     displayName: "cloudflare_temp_email",
     description: "自建 cloudflare_temp_email 实例的管理端 API；apiKey 填实例管理员 token（x-admin-auth）",
   });
-  registry.register(new MoeMailAdapter(), {
+  registry.register(new MoeMailAdapter({ fetchFn: partial.fetchFn }), {
     displayName: "MoeMail",
     description: "自建 MoeMail 实例；apiKey 填 MoeMail API Key（X-API-Key），settings 可配 defaultExpiryMs",
   });
-  registry.register(new YydsMailAdapter(), {
+  registry.register(new YydsMailAdapter({ fetchFn: partial.fetchFn }), {
     displayName: "YYDS Mail",
     description: "YYDS Mail（vip.215.im）公开 API；apiKey 填 AC- 前缀 API Key，baseUrl 填实例根地址（自动补 /v1）",
   });
-  registry.register(new DuckMailAdapter(), {
+  registry.register(new DuckMailAdapter({ fetchFn: partial.fetchFn }), {
     displayName: "DuckMail",
     description: "DuckMail 公开 API；apiKey 可选（dk_ 前缀，私有域名需要），系统域名可匿名建箱",
   });

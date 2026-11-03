@@ -402,7 +402,7 @@ export const healthChecks = sqliteTable("health_checks", {
 
 - 路径前缀 `/upstream/{寻址}/**`：整段转发到对应上游。两种寻址：
   - **按实例 ID**：`/upstream/{upstreamId}/**` 精确转发（相比最初设想的裸 `/{upstreamId}/**` 收进了显式命名空间，避免与 SPA 深链和未来顶级路由产生歧义）；
-  - **按适配器类型**：`/upstream/{type}/**`（如 `/upstream/moemail`）。单实例直接转发；多实例按域名路由（body 的 `domain` 字段，或 query 中形如邮箱的 `address`/`query` 参数）；无域名时 GET 扇出合并（数组拼接）、DELETE 取第一个 2xx、POST/PUT/PATCH 返回 400 DOMAIN_REQUIRED（防止重复创建的副作用）。类型级响应带 `X-Gateway-Upstream-Id(s)` 与 `X-Gateway-Partial-Failure` 头。
+  - **按适配器类型**：`/upstream/{type}/**`（如 `/upstream/moemail`）。单实例直接转发；多实例读信/删除优先按已登记邮箱归属定位，其他请求按域名路由；无域名 GET 扇出合并，MoeMail 邮箱列表使用各实例独立游标组成的聚合游标；DELETE 不能确定唯一归属时返回 400 UPSTREAM_REQUIRED，不扇出。POST/PUT/PATCH 无域名返回 400 DOMAIN_REQUIRED。类型级响应带 `X-Gateway-Upstream-Id(s)`，普通扇出部分失败带 `X-Gateway-Partial-Failure`；聚合分页某渠道失败时整页失败，重试原游标。
 - 鉴权沿用网关 API key（`Authorization: Bearer`）；上游真实凭证由适配器的 `authHeaders(cfg)` 声明并由网关注入，客户端不可见、伪造无效（`X-API-Key`/`x-admin-auth` 等请求头一律剥离重注）。
 - 方法、子路径、query string、请求体、响应状态与 body 均原样转发（含 4xx，不做错误信封改写）；逐跳头与网关凭证不外泄。
 - 适配器未实现 `authHeaders` 的类型返回 501；单个上游可用 `settings.passthroughEnabled: false` 关闭。
