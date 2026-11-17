@@ -9,7 +9,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="relative z-10 min-h-screen flex items-center justify-center">
         <LoadingSpinner text="正在验证管理员身份..." />
       </div>
     );

@@ -15,8 +15,8 @@ import type { GatewayConfig } from "../core/app";
 import { registerSettingsRoutes } from "./settings";
 import { runMailboxCleanup } from "../core/mailbox-cleanup";
 import { runHealthChecks, effectiveMonitorIntervalMs, autoSyncDomainsEnabled, HEALTH_HISTORY_KEEP } from "../core/monitor";
-import { resolveUpstreamByDomain } from "../core/routing";
-import { UpstreamError } from "../ports/upstream";
+import { UpstreamError, type MailboxRef } from "../ports/upstream";
+import type { UpstreamWithDomain } from "../ports/stores";
 import { upstreamConfigOf } from "./v1";
 import {
   ErrorEnvelope,
@@ -809,7 +809,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
       summary: "把上游已存在的邮箱地址补登记进网关注册表",
       description:
         "用于客户端从「直连上游」切到「走网关」时找回存量邮箱：这些邮箱上游有、网关注册表没有，" +
-        "统一 API 因此读不到它们。逐个地址按域名解析归属渠道，再调适配器反查上游确认存在后登记。\n\n" +
+        "统一 API 因此读不到它们。可指定 upstreamId；未指定时查询同域名候选渠道，确认唯一归属后登记，多个命中或归属不确定时要求指定渠道。\n\n" +
         "刻意只放在管理端而非 /v1：cf-temp-email 用的是实例级 admin token，网关拿它能读该实例上" +
         "任意地址；若开成 key 自助纳管，等于把「读任意已存在地址」的权限发给每把 key。\n\n" +
         "依赖每邮箱独立凭证的上游（DuckMail）无法纳管——密码是建箱时随机生成的，事后换不回 token。",
@@ -823,7 +823,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
         },
         400: errResp("参数不合法"),
         401: errResp("未登录"),
-        404: errResp("指定的归属 key 不存在"),
+        404: errResp("指定的归属 key 或来源渠道不存在"),
       },
     }),
     async (c) => {
@@ -835,6 +835,10 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
         const key = await stores.apiKeys.get(body.apiKeyId);
         if (!key) throw new AppError("NOT_FOUND", `API key 不存在: ${body.apiKeyId}`);
         apiKeyId = key.id;
+      }
+
+      if (body.upstreamId && !await stores.upstreams.get(body.upstreamId)) {
+        throw new AppError("NOT_FOUND", `上游不存在: ${body.upstreamId}`);
       }
 
       const imported: { address: string; id: string; upstreamId: string }[] = [];
@@ -849,19 +853,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
           const existing = await stores.mailboxes.findByAddress(address);
           if (existing) throw new AppError("CONFLICT", "该地址已在网关注册表中");
 
-          // 不带 key 白名单过滤：管理员纳管不受某把 key 的可用范围限制
-          const upstream = await resolveUpstreamByDomain(stores.upstreams, domain, {});
-          const adapter = registry.has(upstream.type) ? registry.get(upstream.type) : null;
-          if (!adapter) throw new AppError("ADAPTER_MISSING", `上游类型 ${upstream.type} 未接入网关`);
-          if (typeof adapter.resolveByAddress !== "function") {
-            throw new AppError(
-              "CAPABILITY_MISSING",
-              `上游类型 ${upstream.type} 不支持地址纳管（该上游的邮箱操作依赖每邮箱独立凭证，事后无法重建）`,
-            );
-          }
-
-          const cfg = await upstreamConfigOf(upstream, crypto);
-          const ref = await adapter.resolveByAddress(cfg, address);
+          const { upstream, ref } = await resolveImportedMailbox(address, domain, body.upstreamId);
           const row = await stores.mailboxes.create({
             id: newId(),
             upstreamId: upstream.id,
@@ -951,6 +943,48 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
   );
 
   // ---------- helpers ----------
+
+  /** 查已有邮箱的实际归属，不能复用“新建邮箱时选第一家”的策略。 */
+  async function resolveImportedMailbox(address: string, domain: string, upstreamId?: string) {
+    const rows = (await stores.upstreams.listUpstreamsByDomain(domain))
+      .filter((row) => !upstreamId || row.id === upstreamId);
+    const enabled = rows.filter((row) => row.enabled);
+    if (enabled.length === 0) throw new AppError("DOMAIN_NOT_ROUTED", `没有启用的上游拥有域名 ${domain}`);
+    const candidates = enabled.filter((row) => row.domainEnabled);
+    if (candidates.length === 0) throw new AppError("DOMAIN_DISABLED", `域名 ${domain} 已在管理端停用`);
+
+    const matches: { upstream: UpstreamWithDomain; ref: MailboxRef }[] = [];
+    const failures: unknown[] = [];
+    for (const upstream of candidates) {
+      try {
+        if (!registry.has(upstream.type)) throw new AppError("ADAPTER_MISSING", `上游类型 ${upstream.type} 未接入网关`);
+        const adapter = registry.get(upstream.type);
+        if (!adapter.resolveByAddress) {
+          throw new AppError("CAPABILITY_MISSING", `上游类型 ${upstream.type} 不支持地址纳管（该上游的邮箱操作依赖每邮箱独立凭证，事后无法重建）`);
+        }
+        const cfg = await upstreamConfigOf(upstream, crypto);
+        const ref = await adapter.resolveByAddress(cfg, address);
+        if (ref.address.trim().toLowerCase() !== address) {
+          throw new UpstreamError("UNKNOWN", upstream.id, { message: "上游反查返回了不同的邮箱地址" });
+        }
+        matches.push({ upstream, ref });
+      } catch (err) {
+        // 只有确认不存在才排除此渠道；超时、认证失败、查询不完整均不能证明归属。
+        if (!(err instanceof UpstreamError && err.code === "NOT_FOUND")) failures.push(err);
+      }
+    }
+    if (matches.length > 1) {
+      throw new AppError("UPSTREAM_REQUIRED", `多个渠道都存在 ${address}，请选择来源渠道后重试`);
+    }
+    if (failures.length > 0) {
+      if (matches.length > 0) throw new AppError("UPSTREAM_REQUIRED", `部分渠道查询失败，无法确认 ${address} 的唯一归属，请选择来源渠道后重试`);
+      throw failures[0];
+    }
+    if (matches.length === 0) {
+      throw new UpstreamError("NOT_FOUND", candidates[0]!.id, { message: `候选渠道中不存在 ${address}` });
+    }
+    return matches[0]!;
+  }
 
   /**
    * 把纳管过程中的异常压成 {code, message}。

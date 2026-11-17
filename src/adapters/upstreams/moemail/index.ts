@@ -119,6 +119,19 @@ export class MoeMailAdapter implements UpstreamAdapter {
       .map((domain) => ({ domain }));
   }
 
+  mergePassthroughList(input: { path: string; bodies: unknown[]; mergedBody: unknown }): unknown | null {
+    if (input.path !== "/api/config" || !input.mergedBody || typeof input.mergedBody !== "object") return null;
+    const domains = new Set<string>();
+    for (const body of input.bodies) {
+      if (!body || typeof body !== "object" || typeof (body as { emailDomains?: unknown }).emailDomains !== "string") return null;
+      for (const domain of (body as { emailDomains: string }).emailDomains.split(",")) {
+        const normalized = domain.trim().toLowerCase();
+        if (normalized) domains.add(normalized);
+      }
+    }
+    return { ...input.mergedBody, emailDomains: [...domains].join(",") };
+  }
+
   async createMailbox(cfg: UpstreamConfig, req: CreateMailboxRequest): Promise<MailboxRef> {
     const apiKey = requireApiKey(cfg, "X-API-Key");
     const base = stripTrailingSlash(cfg.baseUrl);

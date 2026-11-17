@@ -7,6 +7,7 @@ import type { AdminAuthConfig } from "./middleware/auth";
 import { upstreamConfigOf } from "./v1";
 import type { AdapterRegistry } from "../adapters/registry";
 import type { CryptoPort } from "../ports/crypto";
+import type { UpstreamAdapter } from "../ports/upstream";
 import type { UpstreamRow, UpstreamWithDomain } from "../ports/stores";
 import { AppError } from "../core/errors";
 import { newId } from "../core/ids";
@@ -600,7 +601,9 @@ async function forwardRaw(
   searchOverride?: string,
 ): Promise<Response> {
   assertForwardable(row, deps.registry);
-  const base = new URL(row.baseUrl);
+  const adapter = deps.registry.get(row.type);
+  const cfg = await upstreamConfigOf(row, deps.crypto);
+  const base = new URL(adapter.passthroughBaseUrl?.(cfg, subPath) ?? cfg.baseUrl);
   const incoming = new URL(c.req.raw.url);
   const target = new URL(base.toString());
   target.pathname = `${base.pathname.replace(/\/+$/, "")}${subPath || "/"}`;
@@ -610,8 +613,6 @@ async function forwardRaw(
   c.req.raw.headers.forEach((value, key) => {
     if (!BLOCKED_REQUEST_HEADERS.has(key.toLowerCase())) headers.set(key, value);
   });
-  const adapter = deps.registry.get(row.type);
-  const cfg = await upstreamConfigOf(row, deps.crypto);
   for (const [key, value] of Object.entries(adapter.authHeaders!(cfg))) {
     headers.set(key, value);
   }
@@ -666,7 +667,7 @@ async function fanOutGet(
       };
     }),
   );
-  return collectFanOut(results);
+  return collectFanOut(results, deps.registry.get(instances[0]!.type), subPath);
 }
 
 type FanOutEntry = PromiseSettledResult<{ row: UpstreamRow; res: Response }>;
@@ -741,6 +742,8 @@ async function fanOutCursorPage(
 
 async function collectFanOut(
   results: FanOutEntry[],
+  adapter: UpstreamAdapter,
+  subPath: string,
 ): Promise<Response> {
   const successes: { row: UpstreamRow; res: Response }[] = [];
   const errors: string[] = [];
@@ -797,7 +800,8 @@ async function collectFanOut(
   });
 
   if (bodies.every((b) => b !== null)) {
-    const merged = mergeJsonBodies(bodies);
+    const mergedBody = mergeJsonBodies(bodies);
+    const merged = adapter.mergePassthroughList?.({ path: subPath, bodies, mergedBody }) ?? mergedBody;
     if (merged !== null) {
       return new Response(JSON.stringify(merged), {
         status: 200,

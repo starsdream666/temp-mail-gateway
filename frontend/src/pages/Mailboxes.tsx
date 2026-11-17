@@ -55,6 +55,7 @@ export const Mailboxes: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [importText, setImportText] = useState('');
   const [importKeyId, setImportKeyId] = useState('');
+  const [importUpstreamId, setImportUpstreamId] = useState('');
   const [importErrors, setImportErrors] = useState('');
   const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
 
@@ -224,7 +225,7 @@ export const Mailboxes: React.FC = () => {
     }
     try {
       setImporting(true);
-      const res = await importMailboxes(addresses, importKeyId || null);
+      const res = await importMailboxes(addresses, importKeyId || null, importUpstreamId || undefined);
       if (res.failed.length === 0) {
         toast.success(`已纳管 ${res.imported.length} 个邮箱`);
         setImportOpen(false);
@@ -287,6 +288,7 @@ export const Mailboxes: React.FC = () => {
             type="button"
             onClick={() => {
               setImportErrors('');
+              setImportUpstreamId(selectedUpstreamId);
               setImportOpen(true);
             }}
             title="把上游已存在但网关没登记的邮箱补进注册表"
@@ -361,6 +363,25 @@ export const Mailboxes: React.FC = () => {
               placeholder={'user1@example.com\nuser2@example.com'}
               className="w-full px-3 py-2 font-mono text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
             />
+          </div>
+
+          <div>
+            <label htmlFor="import-upstream" className="block text-xs font-medium text-slate-500 mb-1.5">来源渠道</label>
+            <select
+              id="import-upstream"
+              value={importUpstreamId}
+              onChange={(e) => setImportUpstreamId(e.target.value)}
+              disabled={importing}
+              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all cursor-pointer"
+            >
+              <option value="">自动确认归属</option>
+              {upstreams.filter((u) => u.enabled).map((u) => (
+                <option key={u.id} value={u.id}>{u.name} ({u.type})</option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-slate-400">
+              同一地址存在于多个渠道，或某个渠道暂时无法查询时，请选择实际来源渠道。
+            </p>
           </div>
 
           <div>

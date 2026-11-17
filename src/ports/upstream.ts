@@ -153,6 +153,8 @@ export interface UpstreamAdapter {
    * cfg.apiKey 已解密。
    */
   authHeaders?(cfg: UpstreamConfig): Record<string, string>;
+  /** 透传原生路径的根地址；允许适配器去掉配置中重复的 API 版本后缀。 */
+  passthroughBaseUrl?(cfg: UpstreamConfig, path: string): string;
   /** 仅邮箱独立凭证端点可接受客户端的邮箱 Bearer，网关凭证仍被剥离。 */
   passthroughMailboxAuth?(path: string, method: string, token: string): Record<string, string>;
   /** 在读响应体之前声明需要列表过滤的路径。 */
@@ -172,6 +174,9 @@ export interface UpstreamAdapter {
    * 无法识别时返回 null（如 cf-temp_email 的删除接口只含上游内部记录 ID，无法映射）。
    */
   inspectPassthrough?(input: PassthroughInspectInput): PassthroughObservation | null;
+
+  /** 列表经过权限过滤、完成通用合并后，修正适配器专属字段（如域名字符串）。 */
+  mergePassthroughList?(input: { path: string; bodies: unknown[]; mergedBody: unknown }): unknown | null;
 
   /**
    * 透传列表过滤（可选能力）：GET 命中"枚举型"端点（列出邮箱 / 列出可用域名）

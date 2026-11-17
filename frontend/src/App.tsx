@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/Toast';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ThemeBackdrop } from './components/ThemeBackdrop';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
@@ -15,9 +17,11 @@ import { Settings } from './pages/Settings';
 
 export const App: React.FC = () => {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <BrowserRouter>
+    <ThemeProvider>
+      <ThemeBackdrop />
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
           <Routes>
             {/* 登录页 */}
             <Route path="/login" element={<Login />} />
@@ -44,9 +48,10 @@ export const App: React.FC = () => {
             {/* 未知路由重定向 */}
             <Route path="*" element={<Navigate to="/upstreams" replace />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </ToastProvider>
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 };
 

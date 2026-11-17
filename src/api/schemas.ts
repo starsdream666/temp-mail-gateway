@@ -215,6 +215,7 @@ export const ImportMailboxesBody = z
   .object({
     addresses: z.array(z.string().min(3).max(320)).min(1).max(200),
     apiKeyId: z.string().min(1).nullable().optional(),
+    upstreamId: z.string().min(1).optional().describe("指定来源渠道；未指定时确认同域名渠道的唯一归属"),
   })
   .openapi("ImportMailboxesBody");
 

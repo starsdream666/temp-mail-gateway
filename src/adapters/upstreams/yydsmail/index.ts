@@ -115,6 +115,15 @@ export class YydsMailAdapter implements UpstreamAdapter {
     };
   }
 
+  passthroughBaseUrl(cfg: UpstreamConfig, path: string): string {
+    // 原生透传路径已含 /v1；保留反向代理的路径前缀，仅去掉重复版本后缀。
+    const base = new URL(cfg.baseUrl);
+    if (/^\/v1(?:\/|$)/i.test(path)) {
+      base.pathname = base.pathname.replace(/\/+$/, "").replace(/\/v1$/i, "");
+    }
+    return base.toString();
+  }
+
   authHeaders(cfg: UpstreamConfig): Record<string, string> {
     return { "X-API-Key": requireApiKey(cfg, "X-API-Key（AC- 前缀）") };
   }

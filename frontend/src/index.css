@@ -8,3 +8,199 @@ body {
     "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
     "Noto Color Emoji";
 }
+
+:root,
+[data-motion-speed='fast'] {
+  --tmg-page-enter-duration: 280ms;
+  --tmg-page-fade-duration: 260ms;
+  --tmg-route-progress-duration: 420ms;
+  --tmg-sidebar-transition-duration: 300ms;
+  --tmg-page-offset: 14px;
+}
+
+[data-motion-speed='medium'] {
+  --tmg-page-enter-duration: 500ms;
+  --tmg-page-fade-duration: 460ms;
+  --tmg-route-progress-duration: 680ms;
+  --tmg-sidebar-transition-duration: 450ms;
+  --tmg-page-offset: 18px;
+}
+
+[data-motion-speed='slow'] {
+  --tmg-page-enter-duration: 820ms;
+  --tmg-page-fade-duration: 760ms;
+  --tmg-route-progress-duration: 1050ms;
+  --tmg-sidebar-transition-duration: 650ms;
+  --tmg-page-offset: 24px;
+}
+
+@keyframes pageEnterForward {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, var(--tmg-page-offset, 14px), 0) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes pageEnterBackward {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, calc(var(--tmg-page-offset, 14px) * -1), 0) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes pageEnterFade {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, calc(var(--tmg-page-offset, 14px) * 0.6), 0) scale(0.994);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes routeProgressSweep {
+  0% {
+    opacity: 0.95;
+    transform: scaleX(0);
+  }
+  55% {
+    opacity: 1;
+    transform: scaleX(0.76);
+  }
+  85% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes sidebarTooltipIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(-6px, -50%, 0) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, -50%, 0) scale(1);
+  }
+}
+
+@keyframes uiBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes uiFadeZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes uiSlideDownIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes uiSlideDownSmall {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.page-enter-forward {
+  animation: pageEnterForward var(--tmg-page-enter-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.page-enter-backward {
+  animation: pageEnterBackward var(--tmg-page-enter-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.page-enter-fade {
+  animation: pageEnterFade var(--tmg-page-fade-duration, 260ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.route-progress-sweep {
+  transform-origin: left center;
+  animation: routeProgressSweep var(--tmg-route-progress-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.sidebar-tooltip-in {
+  animation: sidebarTooltipIn 150ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-backdrop-in {
+  animation: uiBackdropIn 150ms ease-out both;
+}
+
+.animate-in.fade-in.zoom-in-95 {
+  animation: uiFadeZoomIn 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-in.slide-in-from-top-2 {
+  animation: uiSlideDownIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-in.fade-in.slide-in-from-top-1 {
+  animation: uiSlideDownSmall 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sidebar-width-transition {
+  transition-property: width, transform;
+  transition-duration: var(--tmg-sidebar-transition-duration, 300ms);
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-forward,
+  .page-enter-backward,
+  .page-enter-fade,
+  .route-progress-sweep,
+  .sidebar-tooltip-in,
+  .animate-backdrop-in,
+  .animate-in.fade-in.zoom-in-95,
+  .animate-in.slide-in-from-top-2,
+  .animate-in.fade-in.slide-in-from-top-1 {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+
+  .sidebar-width-transition {
+    transition-duration: 0.01ms !important;
+  }
+}

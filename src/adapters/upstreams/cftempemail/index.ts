@@ -203,7 +203,11 @@ export class CfTempEmailAdapter implements UpstreamAdapter {
       // 最后一页（返回不足一页）说明查询结果已穷尽
       if (results.length < ADDRESS_LOOKUP_PAGE_SIZE) return null;
     }
-    return null;
+    // 达到扫描上限不等于不存在；NOT_FOUND 会让网关按幂等删除移除登记。
+    throw new UpstreamError("UNAVAILABLE", cfg.id, {
+      message: `上游地址簿查询达到 ${ADDRESS_LOOKUP_PAGE_SIZE * ADDRESS_LOOKUP_MAX_PAGES} 条扫描上限，尚未确认 ${address} 是否存在`,
+      retryable: true,
+    });
   }
 
   async listMessages(

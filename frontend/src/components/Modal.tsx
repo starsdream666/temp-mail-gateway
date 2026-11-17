@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -96,14 +97,13 @@ export const Modal: React.FC<ModalProps> = ({
     '2xl': 'max-w-2xl',
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       {/* 遮罩背景 */}
       <div
-        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm animate-backdrop-in"
         onClick={() => closeOnOverlayClick && onClose()}
       />
-
       {/* 对话框卡片 */}
       <div
         ref={panelRef}
@@ -140,4 +140,6 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

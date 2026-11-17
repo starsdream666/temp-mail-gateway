@@ -202,14 +202,16 @@ curl -s -X DELETE "$BASE/v1/mailboxes/{id}?force=1" -H "Authorization: Bearer tm
 
 ### 纳管上游已有的邮箱地址
 
-客户端从「直连上游」切到「走网关」时，上游早已存在的邮箱不在网关注册表里，统一 API 读不到它们。管理后台「邮箱概览」页的**纳管已有地址**可以把它们补登记进来（也可直接调 `POST /admin/mailboxes/import`，body `{addresses: [...], apiKeyId?}`）：
+客户端从「直连上游」切到「走网关」时，上游早已存在的邮箱不在网关注册表里，统一 API 读不到它们。管理后台「邮箱概览」页的**纳管已有地址**可以把它们补登记进来（也可直接调 `POST /admin/mailboxes/import`，body `{addresses: [...], apiKeyId?, upstreamId?}`）：
 
 - 逐地址独立结算，一个失败不影响其余（返回 `{imported, failed}`，`failed` 里带 code 与中文原因）；
-- 按域名解析归属渠道后，调适配器**反查上游确认该地址真的存在**才登记，顺带回填上游的权威到期时间；
+- 未指定 `upstreamId` 时逐个检查该域名的启用渠道，**反查上游确认唯一归属**后才登记，顺带回填权威到期时间；多个渠道都存在该地址，或有渠道查询失败无法排除歧义时，返回 `UPSTREAM_REQUIRED`，可在纳管弹窗选择来源渠道，或通过 `upstreamId` 指定；
 - `apiKeyId` 缺省登记为共享邮箱（任何 key 可读、默认不进列表），指定后只对该 key 的 `GET /v1/mailboxes` 可见；
 - **DuckMail 无法纳管**：它的邮箱操作依赖每邮箱独立凭证（密码建箱时随机生成），事后换不回 token，返回 `CAPABILITY_MISSING`。YYDS Mail 同样未实现——其上游标识是账号 id 且没有「地址 → id」查询端点。
 
 刻意只放管理端而不开在 `/v1`：cf-temp-email 用的是实例级 admin token，网关拿它能读该实例上**任意**地址；若开成 key 自助纳管，等于把「读任意已存在地址」的权限发给每把 key。
+
+CF 旧记录若未保存上游内部地址 ID，删除时会查询地址簿。达到扫描上限仍未找到目标时返回查询不完整错误并保留登记；只有查询确已穷尽才能按“不存在”处理。显式 `force=1` 仍遵循尽力删除语义，未确认删除的上游资源会记入残留列表。
 
 ### 尽力删除的残留（孤儿记录）
 
@@ -349,6 +351,8 @@ curl -X POST http://localhost:8787/upstream/moemail/api/emails/generate \
 
 其他规则：
 
+- MoeMail 多实例 `GET /api/config` 会合并各渠道的 `emailDomains`（去重），且在合并前应用各自的域名权限过滤。
+- YYDS 的上游地址可带或不带末尾 `/v1`；原生透传统一使用 `/upstream/yydsmail/v1/...`，反向代理的路径前缀会保留。
 - MoeMail 多实例 `GET /api/emails` 使用网关聚合游标：直接把返回的 `nextCursor` 传回即可，每个渠道分别翻页，`total` 为各渠道总数之和。某渠道本页失败时整页返回错误，重试相同游标；实例或查询条件改变后应重新获取首页。按上游 ID 调用时保留原生游标。
 - DuckMail 原生消息接口需要同时传 `X-Gateway-Key: <网关Key>` 和 `Authorization: Bearer <邮箱token>`；管理员会话可替代前者。邮箱 token 只转发到 DuckMail 明确支持的邮箱操作端点。透传建箱时密码加密保存，`POST /token` 成功后同步保存凭证；统一 API 刷新 token 后也会加密回写。旧版缺少凭证的记录必须先成功登录补全，删除失败会保留记录。
 - 上游请求有 30 秒时限，包含响应头和正文读取；透传支持客户端取消。无需过滤的单实例响应直接流式转发；需要过滤、观察或合并的每份响应最多缓冲 4 MiB，超限返回错误。健康巡检最多并行检查 3 个渠道。

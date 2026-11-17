@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, Eraser, KeyRound, Loader2, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { Activity, Eraser, Gauge, KeyRound, Loader2, Palette, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getGlobalSettings, updateGlobalSettings } from '../api/client';
 import type { GlobalSettings, UpdateGlobalSettingsPayload } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../components/Toast';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingSpinner } from '../components/Loading';
@@ -35,6 +36,7 @@ export const Settings: React.FC = () => {
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const toast = useToast();
+  const { theme, themes, setTheme, motionSpeed, motionSpeeds, setMotionSpeed } = useTheme();
   const { checkSession } = useAuth();
   const navigate = useNavigate();
 
@@ -221,6 +223,97 @@ export const Settings: React.FC = () => {
           <div className="flex justify-end"><button type="submit" disabled={!passwordDirty || runtimeDirty} className={buttonClass}>{saving === 'password' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}更新登录密码</button></div>
         </fieldset>
       </form>
+
+      <section className={cardClass}>
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+          <Gauge className="w-5 h-5 text-indigo-600" />
+          <h2 className="font-semibold text-slate-900">界面动效与外观偏好</h2>
+        </div>
+        <div className="p-6 space-y-6">
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">页面切换动画速度</h3>
+                <p className="text-xs text-slate-500 mt-0.5">控制路由切换入场动效、顶部流光条与侧边栏展开折叠的过渡节奏。</p>
+              </div>
+              <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+                当前：{motionSpeeds.find((s) => s.id === motionSpeed)?.label}
+              </span>
+            </div>
+            <div role="group" aria-label="页面切换动画速度" className="grid gap-3 sm:grid-cols-3">
+              {motionSpeeds.map((item) => {
+                const active = item.id === motionSpeed;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMotionSpeed(item.id)}
+                    aria-pressed={active}
+                    className={[
+                      'theme-swatch-card flex flex-col items-start p-3.5 rounded-xl border text-left transition-all duration-150',
+                      active
+                        ? 'border-indigo-200 bg-indigo-50/70 shadow-sm'
+                        : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50/70',
+                    ].join(' ')}
+                  >
+                    <div className="w-full flex items-center justify-between gap-2">
+                      <span className={`text-sm font-bold ${active ? 'text-indigo-700' : 'text-slate-900'}`}>
+                        {item.label}
+                      </span>
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                        {item.badge}
+                      </span>
+                    </div>
+                    <span className="mt-1.5 text-xs text-slate-500">{item.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-5 border-t border-slate-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Palette className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">外观主题方案</h3>
+            </div>
+            <div role="group" aria-label="外观主题方案" className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              {themes.map((item) => {
+                const active = item.id === theme;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTheme(item.id)}
+                    aria-pressed={active}
+                    className={[
+                      'theme-swatch-card flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-150',
+                      active
+                        ? 'border-indigo-200 bg-indigo-50/70 shadow-sm'
+                        : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50/70',
+                    ].join(' ')}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full shrink-0 border border-white shadow-sm"
+                      style={{
+                        background: `linear-gradient(135deg, ${item.swatches.accent}, ${item.swatches.secondary})`,
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <div className={`text-xs font-semibold truncate ${active ? 'text-indigo-700' : 'text-slate-900'}`}>
+                        {item.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">{item.decorationTag}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500 leading-6">
+          以上动效速度与外观主题仅保存于当前浏览器本地存储，修改后立即生效，无需点击上方保存按钮。
+        </div>
+      </section>
     </div>
   );
 };

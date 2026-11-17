@@ -323,10 +323,11 @@ export async function pruneExpiredMailboxes(): Promise<{ deleted: number }> {
 export async function importMailboxes(
   addresses: string[],
   apiKeyId?: string | null,
+  upstreamId?: string,
 ): Promise<ImportMailboxesResult> {
   return await apiFetch<ImportMailboxesResult>('/admin/mailboxes/import', {
     method: 'POST',
-    body: JSON.stringify({ addresses, apiKeyId: apiKeyId || null }),
+    body: JSON.stringify({ addresses, apiKeyId: apiKeyId || null, upstreamId: upstreamId || undefined }),
   });
 }
 

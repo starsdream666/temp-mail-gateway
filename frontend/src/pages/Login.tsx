@@ -4,6 +4,8 @@ import { Mail, Lock, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../types';
 import { useToast } from '../components/Toast';
+import { PageTransition } from '../components/PageTransition';
+import { ThemeSwitcher } from '../components/ThemeSwitcher';
 
 export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -54,17 +56,16 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 flex items-center justify-center p-4">
-      {/* 背景装饰光晕 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-indigo-600/15 blur-3xl" />
+    <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+      <div className="fixed top-4 right-4 z-20">
+        <ThemeSwitcher variant="floating" />
       </div>
 
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 border border-slate-100">
+      <PageTransition direction="fade" className="relative w-full max-w-md">
+        <div className="w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
         {/* 头部 Logo 与简介 */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl theme-brand-badge text-white mb-4">
             <Mail className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Temp Mail Gateway</h1>
@@ -139,7 +140,8 @@ export const Login: React.FC = () => {
             会话基于安全的 HttpOnly Cookie 建立 · 仅授权管理员访问
           </p>
         </div>
-      </div>
+        </div>
+      </PageTransition>
     </div>
   );
 };

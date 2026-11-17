@@ -5,8 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Temp Mail Gateway - 管理后台</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('tmg_theme');
+          var valid = ['indigo-atelier', 'cyber-terminal', 'warm-paper', 'aurora-glass'];
+          document.documentElement.dataset.theme = valid.indexOf(t) !== -1 ? t : 'indigo-atelier';
+          var s = localStorage.getItem('tmg_motion_speed');
+          var validSpeed = ['fast', 'medium', 'slow'];
+          document.documentElement.dataset.motionSpeed = validSpeed.indexOf(s) !== -1 ? s : 'fast';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'indigo-atelier';
+          document.documentElement.dataset.motionSpeed = 'fast';
+        }
+      })();
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 min-h-screen antialiased">
+  <body class="min-h-screen antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

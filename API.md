@@ -256,3 +256,9 @@ messages = requests.get(
 例如 `{"name":"测试客户端","mailboxesPerHour":10}` 签发低额度 Key，或 `{"mailboxesPerHour":null}` 将已有 Key 恢复为系统默认。负数、小数、字符串等非法值返回 `400 VALIDATION_ERROR`。
 
 签发、更新与列表响应中的 Key 都包含 `mailboxesPerHour`（保存值）和 `effectiveMailboxesPerHour`（当前生效值，`0` 为不限）。保存后下一次请求生效，当前一小时窗口内的已用次数保留；不限流期间也计数。计数保存在进程内存中，重启后清空，Workers 的不同 isolate 不共享计数。
+
+## 管理端地址纳管
+
+`POST /admin/mailboxes/import` 需要管理员会话，body 为 `{addresses: string[], apiKeyId?: string | null, upstreamId?: string}`。
+
+未指定来源渠道时检查同域名的启用候选，确认唯一命中后登记。多个命中，或部分候选查询失败而无法排除歧义，逐地址返回 `UPSTREAM_REQUIRED`；可指定 `upstreamId` 后重试。指定不存在的渠道返回 404；停用渠道或停用域名不会被用于纳管。返回仍为 `{imported, failed}`，地址之间独立结算。
