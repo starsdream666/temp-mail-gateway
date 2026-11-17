@@ -353,8 +353,8 @@ curl -X POST http://localhost:8787/upstream/moemail/api/emails/generate \
 - DuckMail 原生消息接口需要同时传 `X-Gateway-Key: <网关Key>` 和 `Authorization: Bearer <邮箱token>`；管理员会话可替代前者。邮箱 token 只转发到 DuckMail 明确支持的邮箱操作端点。透传建箱时密码加密保存，`POST /token` 成功后同步保存凭证；统一 API 刷新 token 后也会加密回写。旧版缺少凭证的记录必须先成功登录补全，删除失败会保留记录。
 - 上游请求有 30 秒时限，包含响应头和正文读取；透传支持客户端取消。无需过滤的单实例响应直接流式转发；需要过滤、观察或合并的每份响应最多缓冲 4 MiB，超限返回错误。健康巡检最多并行检查 3 个渠道。
 
-- **鉴权形式兼容**（主 API 与透传一致）：网关 key 可通过 `Authorization: Bearer <key>`、`Authorization: <key>`（裸值）、`X-API-Key`、`X-Admin-Auth`、`X-Gateway-Key` 任一请求头携带；
-- 透传额外接受**管理员会话 cookie**——原生客户端（如浏览器扩展）从登录过管理后台的同一浏览器发起时，往往一个 key 头都不带（例如探测上游公开端点 `/open_api/settings`），管理员本人视同可信；
+- **鉴权形式兼容**（主 API 与透传一致）：网关 key 可通过 `Authorization: Bearer <key>`、`Authorization: <key>`（裸值）、`X-API-Key`、`X-Admin-Auth`、`X-Gateway-Key` 任一请求头携带。非空 `X-Gateway-Key` 显式指定网关身份，不再尝试其他认证头；未指定时按 `Authorization` → `X-API-Key` → `X-Admin-Auth` 顺序选择第一个有效网关 key，不合并权限；
+- 透传额外接受**有效的管理员会话 cookie**，前提是请求实际携带该 cookie。客户端应在包括 `/open_api/settings` 在内的所有透传请求中发送网关 key，不能仅凭同一浏览器登录过后台就省略凭证；
 - 上游真实凭证由网关注入，客户端拿不到也伪造不了（伪造的 `X-API-Key`/`X-Admin-Auth` 值无法通过网关 key 校验）；
 - 透传是"原样代理"：上游的校验（如 MoeMail 的 `expiryTime` 档位白名单）、错误格式、状态码都原样呈现，不做吸附与错误信封改写；
 - 类型级响应带 `X-Gateway-Upstream-Id(s)` 头标明实际服务的实例；部分实例失败时带 `X-Gateway-Partial-Failure`；
@@ -362,6 +362,8 @@ curl -X POST http://localhost:8787/upstream/moemail/api/emails/generate \
 - **域名管控同样生效**：透传的写请求（POST/PUT/PATCH）会前置校验「域名调用开关 + key 域名白名单 + key 渠道白名单」（域名停用 → 403 `DOMAIN_DISABLED`；域名白名单外 → 403 `DOMAIN_NOT_ALLOWED`；渠道白名单外 → 403 `CHANNEL_NOT_ALLOWED`，请求不会转发到上游）；域名无法解析（body/query 均未携带）或尚未同步进注册表时不拦，保持原样代理语义。
 - **类型寻址的候选按 key 渠道白名单收窄（读请求也收）**：`/upstream/{类型}` 的语义是"让网关替我选实例"，因此选主前先过滤到白名单内，全部在名单外 → 403 `CHANNEL_NOT_ALLOWED`。这条对读请求同样生效，原因是不带域名的 GET 会**扇出到该类型全部实例并合并响应**——同一上游软件的两个账户（例如「日常」与「批量注册」各一把上游 key）注册成两个渠道时，合并结果会把另一个账户的邮箱列表泄漏给调用方，而列表过滤按域名工作、区分不出共享同一套域名的两个账户。**按 ID 显式寻址（`/upstream/{上游ID}`）的读请求不受此限**：那是调用方明确指定目标，读存量邮箱不该因白名单调整而中断。
 - 单个上游可在 settings 里设 `{"passthroughEnabled": false}` 关闭，按 ID、域名路由和 GET 合并均遵守该开关；适配器不支持透传的类型返回 501。
+
+cloudflare_temp_email 若启用了站点访问密码，除上游管理员凭证外，还需在该上游的 Settings JSON 中配置 `{"sitePassword":"站点访问密码"}`，由网关注入 `x-custom-auth`。域名同步和健康检测使用公开域名接口，不能证明管理员凭证有效。网关自身认证失败返回 `401 UNAUTHORIZED`；上游认证失败在透传中保留原始 401，在统一 API 中返回 `502 UPSTREAM_ERROR`（`upstreamCode: AUTH_FAILED`）。
 
 ### 接入 floatmail 浏览器扩展（原生客户端实测）
 

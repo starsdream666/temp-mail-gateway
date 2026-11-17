@@ -86,6 +86,8 @@ test("DuckMail native credentials survive registration; gateway and mailbox auth
     assert.equal(await f.cipher.decrypt(stored!.credentialsEnc!),token);
     for (const headers of [
       {...f.headers,Authorization:`Bearer ${token}`},
+      {"X-API-Key":f.headers["X-Gateway-Key"],Authorization:`Bearer ${token}`},
+      {"X-Admin-Auth":f.headers["X-Gateway-Key"],Authorization:`Bearer ${token}`},
       {Cookie:f.cookie,Authorization:`Bearer ${token}`},
     ]) {
       const res = await f.app.request(`/upstream/${id}/messages`,{headers});
@@ -293,4 +295,136 @@ test("per-key list/count use the new index, including shared and expiry filters"
     }
     runMigrations(f.sqlite,resolve("migrations")); // upgrade remains idempotent
   } finally {f.sqlite.close();}
+});
+
+
+test("valid gateway credentials survive unrelated Authorization and forged lower-priority headers", async () => {
+  const captured: Headers[] = [];
+  const f = await fixture(async (_input, init) => {
+    captured.push(new Headers(init?.headers));
+    return json({ domains: ["auth.test"] });
+  });
+  try {
+    await f.upstream("cf-temp-email", "https://auth.test");
+    captured.length = 0;
+    const key = f.headers["X-Gateway-Key"];
+    const variants = [
+      { Authorization: "Bearer " + key },
+      { Authorization: key },
+      { "X-API-Key": key },
+      { "X-Admin-Auth": key },
+      { "X-Gateway-Key": key },
+      { Authorization: "Bearer mailbox-token", "X-API-Key": key },
+      { Authorization: "Basic unrelated-credentials", "X-Admin-Auth": key },
+      { Authorization: "Bearer mailbox-token", "X-API-Key": "forged", "X-Admin-Auth": key },
+      { Authorization: "Bearer " + key, "X-API-Key": "forged", "X-Admin-Auth": "forged" },
+      { "X-Gateway-Key": key, Authorization: "Bearer mailbox-token", "X-API-Key": "forged" },
+    ];
+    for (const path of ["/v1/domains", "/upstream/cf-temp-email/open_api/settings"]) {
+      for (const headers of variants) {
+        const res = await f.app.request(path, { headers });
+        assert.equal(res.status, 200, path + ": " + Object.keys(headers).join(","));
+        await res.text();
+      }
+    }
+    assert.equal(captured.length, variants.length);
+    for (const headers of captured) {
+      assert.equal(headers.get("x-admin-auth"), "channel-secret");
+      assert.equal(headers.get("authorization"), null);
+      assert.equal(headers.get("x-api-key"), null);
+      assert.equal(headers.get("x-gateway-key"), null);
+    }
+  } finally { f.sqlite.close(); }
+});
+
+test("explicit gateway identity and first valid credential retain their own domain restrictions", async () => {
+  const f = await fixture(async () => json({ domains: ["allowed.test", "denied.test"] }));
+  try {
+    await f.upstream("cf-temp-email", "https://auth.test");
+    const restrictedRes = await f.admin("/admin/keys", "POST", { name: "restricted", domains: ["allowed.test"] });
+    assert.equal(restrictedRes.status, 201);
+    const { key: restricted } = await restrictedRes.json() as any;
+    const broadKey = f.headers["X-Gateway-Key"];
+    const variants = [
+      { "X-Gateway-Key": restricted.key, Authorization: "Bearer " + broadKey },
+      { Authorization: "Bearer " + restricted.key, "X-API-Key": broadKey },
+      { Authorization: "Bearer mailbox-token", "X-API-Key": restricted.key, "X-Admin-Auth": broadKey },
+    ];
+    for (const headers of variants) {
+      for (const path of ["/v1/domains", "/upstream/cf-temp-email/open_api/settings"]) {
+        const res = await f.app.request(path, { headers });
+        assert.equal(res.status, 200);
+        const { domains } = await res.json() as any;
+        assert.deepEqual(domains.map((d: string | { domain: string }) => typeof d === "string" ? d : d.domain), ["allowed.test"]);
+      }
+      for (const path of ["/v1/mailboxes", "/upstream/cf-temp-email/admin/new_address"]) {
+        const res = await f.app.request(path, {
+          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: "denied.test", localPart: "probe", name: "probe" }),
+        });
+        assert.equal(res.status, 403);
+        assert.equal((await res.json() as any).error.code, "DOMAIN_NOT_ALLOWED");
+      }
+    }
+  } finally { f.sqlite.close(); }
+});
+
+test("missing, invalid, disabled and explicitly rejected keys never fall through to upstream", async () => {
+  let upstreamCalls = 0;
+  const f = await fixture(async () => { upstreamCalls += 1; return json({ domains: ["auth.test"] }); });
+  try {
+    await f.upstream("cf-temp-email", "https://auth.test");
+    const disabledRes = await f.admin("/admin/keys", "POST", { name: "disabled" });
+    const { key: disabled } = await disabledRes.json() as any;
+    const updateRes = await f.admin("/admin/keys/" + disabled.id, "PATCH", { enabled: false });
+    assert.equal(updateRes.status, 200);
+    upstreamCalls = 0;
+    const valid = f.headers["X-Gateway-Key"];
+    const variants = [
+      {},
+      { Authorization: "Bearer mailbox-token", "X-API-Key": "wrong", "X-Admin-Auth": "wrong" },
+      { "X-API-Key": disabled.key, Authorization: "Bearer mailbox-token" },
+      { "X-Gateway-Key": "wrong", Authorization: "Bearer " + valid, "X-API-Key": valid },
+      { "X-Gateway-Key": disabled.key, "X-Admin-Auth": valid },
+    ];
+    for (const path of ["/v1/domains", "/upstream/cf-temp-email/open_api/settings"]) {
+      for (const headers of variants) {
+        const res = await f.app.request(path, { headers });
+        assert.equal(res.status, 401);
+        assert.equal((await res.json() as any).error.code, "UNAUTHORIZED");
+      }
+    }
+    assert.equal(upstreamCalls, 0);
+    const session = await f.app.request("/upstream/cf-temp-email/open_api/settings", { headers: { Cookie: f.cookie } });
+    assert.equal(session.status, 200);
+    await session.text();
+  } finally { f.sqlite.close(); }
+});
+
+test("CF site password configuration resolves upstream 401 without changing gateway key validation", async () => {
+  const f = await fixture(async (input, init) => {
+    if (new URL(String(input)).pathname === "/open_api/settings") return json({ domains: ["auth.test"], needAuth: true });
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("x-admin-auth"), "channel-secret");
+    if (headers.get("x-custom-auth") !== "site-secret") return new Response("site password required", { status: 401 });
+    return json({ results: [], count: 0 });
+  });
+  try {
+    const upstreamId = await f.upstream("cf-temp-email", "https://auth.test");
+    const path = "/upstream/cf-temp-email/admin/mails?address=probe@auth.test&limit=10&offset=0";
+    const denied = await f.app.request(path, { headers: f.headers });
+    assert.equal(denied.status, 401);
+    assert.equal(await denied.text(), "site password required");
+    const unified = await f.app.request("/v1/mailboxes", {
+      method: "POST", headers: f.headers, body: JSON.stringify({ domain: "auth.test", localPart: "probe" }),
+    });
+    assert.equal(unified.status, 502);
+    assert.equal((await unified.json() as any).error.details.upstreamCode, "AUTH_FAILED");
+    const configured = await f.admin("/admin/upstreams/" + upstreamId, "PUT", { settings: { sitePassword: "site-secret" } });
+    assert.equal(configured.status, 200);
+    await configured.text();
+    const allowed = await f.app.request(path, { headers: f.headers });
+    assert.equal(allowed.status, 200);
+    await allowed.text();
+  } finally { f.sqlite.close(); }
 });

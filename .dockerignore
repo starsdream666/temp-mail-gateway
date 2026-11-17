@@ -17,6 +17,7 @@ dist/
 **/*.key
 data/
 .tmp/
+.archive/
 
 # 版本控制与编辑器
 .git/

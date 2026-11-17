@@ -433,6 +433,13 @@ export const UpstreamFormModal: React.FC<UpstreamFormModalProps> = ({
                 : 'border border-slate-700 focus:ring-indigo-500/30'
             }`}
           />
+          {type === 'cf-temp-email' && (
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              上游启用站点访问密码时，还需配置 <code>{'{"sitePassword":"站点访问密码"}'}</code>。
+              上方 API Key 填上游管理员凭证；客户端连接网关时使用网关签发的 Key。
+              域名同步和健康检测仅检查公开域名接口，不能证明管理凭证有效。
+            </p>
+          )}
           {errors.settings && <p className="mt-1 text-xs text-rose-600 font-medium">{errors.settings}</p>}
         </div>
       </form>

@@ -26,6 +26,7 @@ data/
 
 # Local tools, caches and third-party reference checkouts
 .tmp/
+.archive/
 .wrangler/
 .reasonix/
 .codex/

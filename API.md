@@ -9,6 +9,7 @@
 - 请求与响应默认使用 `application/json`；原始邮件端点返回 `message/rfc822`；删除成功常返回 `204 No Content`。
 - 所有 `/v1/*` 请求都需要网关 API Key。推荐：`Authorization: Bearer <API_KEY>`。
 - 兼容头：`Authorization: <API_KEY>`（裸值）、`X-API-Key`、`X-Admin-Auth`、`X-Gateway-Key`。
+- 多凭证规则：非空 `X-Gateway-Key` 显式指定网关身份，不再尝试其他认证头；未指定时按 `Authorization` → `X-API-Key` → `X-Admin-Auth` 顺序校验，使用第一个有效网关 Key，不合并权限。邮箱 Bearer 不会阻止有效的其他认证头生效。
 - API Key 在管理后台“API Keys”页签发。Key 可受域名白名单、渠道白名单、每小时建箱上限与并发请求上限共同限制。
 - 日期时间均为带时区的 ISO 8601 字符串；`expiresAt` 可能为 `null`。
 - 路径参数：`{id}` 是网关邮箱 ID，`{mid}` 是上游邮件 ID；不要把邮箱地址当作 `{id}`。

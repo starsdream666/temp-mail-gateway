@@ -32,7 +32,7 @@ export function corsMiddleware(allowedOrigins: string | undefined) {
     applyHeaders(c);
     if (c.req.method === "OPTIONS") {
       c.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-      // 网关 key 支持的全部自定义鉴权头都要进预检白名单（extractGatewayKey 支持它们）
+      // 网关 key 支持的全部自定义鉴权头都要进预检白名单（与认证中间件保持一致）
       c.header(
         "Access-Control-Allow-Headers",
         "Authorization, Content-Type, X-API-Key, X-Gateway-Key, X-Admin-Auth",

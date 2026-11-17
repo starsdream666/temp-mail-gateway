@@ -30,39 +30,47 @@ export async function checkAdminPassword(password: string, config: AdminAuthConf
 }
 
 /**
- * 从请求中提取网关 key，兼容多种请求头形式（主 API 与透传共用）：
- *   Authorization: Bearer <key> / Authorization: <key>（无 scheme 裸值）/
- *   X-API-Key / X-Admin-Auth / X-Gateway-Key
+ * 收集网关 key 候选：显式 X-Gateway-Key 固定网关身份；否则按原有顺序
+ * 校验 Authorization、X-API-Key、X-Admin-Auth，防止邮箱 Bearer 遮蔽有效 key。
+ * 多个有效凭证并存时仍选择优先级最高者，不合并权限。
  */
-export function extractGatewayKey(c: Context): string {
-  // 显式网关身份允许与邮箱独立 Bearer 同时携带。
+function extractGatewayKeys(c: Context): string[] {
   const explicit = c.req.header("x-gateway-key")?.trim();
-  if (explicit) return explicit;
+  if (explicit) return [explicit];
+  const keys: string[] = [];
   const auth = (c.req.header("Authorization") ?? "").trim();
   if (auth) {
     const bearer = /^Bearer\s+(.+)$/i.exec(auth);
-    return (bearer ? bearer[1]! : auth).trim();
+    keys.push((bearer ? bearer[1]! : auth).trim());
   }
-  for (const name of ["x-api-key", "x-admin-auth", "x-gateway-key"]) {
+  for (const name of ["x-api-key", "x-admin-auth"]) {
     const value = (c.req.header(name) ?? "").trim();
-    if (value) return value;
+    if (value) keys.push(value);
   }
-  return "";
+  return [...new Set(keys)];
+}
+
+async function verifyGatewayKey(apiKeys: ApiKeyStore, keys: string[]): Promise<{ key: string; row: ApiKeyRow } | null> {
+  for (const key of keys) {
+    const row = await apiKeys.verify(await hashApiKey(key));
+    if (row) return { key, row };
+  }
+  return null;
 }
 
 /** /v1/* 鉴权：多种请求头形式携带网关 key */
 export function requireApiKey(apiKeys: ApiKeyStore) {
   return async (c: Context, next: Next) => {
-    const key = extractGatewayKey(c);
-    if (!key) {
+    const keys = extractGatewayKeys(c);
+    if (keys.length === 0) {
       throw new AppError(
         "UNAUTHORIZED",
         "缺少凭证：请以 Authorization: Bearer <key>、Authorization: <key>、X-API-Key、X-Admin-Auth 或 X-Gateway-Key 头携带网关 key",
       );
     }
-    const row = await apiKeys.verify(await hashApiKey(key));
-    if (!row) throw new AppError("UNAUTHORIZED", "无效的 API key");
-    c.set("apiKey", row);
+    const verified = await verifyGatewayKey(apiKeys, keys);
+    if (!verified) throw new AppError("UNAUTHORIZED", "无效的 API key");
+    c.set("apiKey", verified.row);
     await next();
   };
 }
@@ -77,15 +85,12 @@ export function requireApiKey(apiKeys: ApiKeyStore) {
  */
 export function requirePassthroughKey(apiKeys: ApiKeyStore, admin: AdminAuthConfig) {
   return async (c: Context, next: Next) => {
-    const key = extractGatewayKey(c);
-    if (key) {
-      const row = await apiKeys.verify(await hashApiKey(key));
-      if (row) {
-        c.set("apiKey", row);
-        c.set("gatewayKey", key);
-        await next();
-        return;
-      }
+    const verified = await verifyGatewayKey(apiKeys, extractGatewayKeys(c));
+    if (verified) {
+      c.set("apiKey", verified.row);
+      c.set("gatewayKey", verified.key);
+      await next();
+      return;
     }
     if (await isValidAdminSession(c, admin)) {
       c.set("apiKey", adminSessionRow());
