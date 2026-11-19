@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Modal } from './Modal';
 import { Badge } from './Badge';
+import { changedUpstreamFields } from '../utils/upstream';
 import {
   AdapterTypeInfo,
   UpstreamDetail,
@@ -173,12 +174,12 @@ export const UpstreamFormModal: React.FC<UpstreamFormModalProps> = ({
       const parsedSettings = JSON.parse(settingsText.trim() || '{}');
 
       if (isEditing) {
-        const payload: UpdateUpstreamPayload = {
+        const payload = changedUpstreamFields(initialData, {
           name: name.trim(),
           baseUrl: baseUrl.trim(),
           enabled,
           settings: parsedSettings,
-        };
+        });
 
         if (clearApiKey) {
           payload.apiKey = null;
@@ -186,7 +187,7 @@ export const UpstreamFormModal: React.FC<UpstreamFormModalProps> = ({
           payload.apiKey = apiKey.trim();
         }
 
-        await onSubmit(payload);
+        if (Object.keys(payload).length > 0) await onSubmit(payload);
       } else {
         const payload: CreateUpstreamPayload = {
           name: name.trim(),

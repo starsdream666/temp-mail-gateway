@@ -37,6 +37,18 @@ const ThemeMiniPreview: React.FC<{ item: ThemeDefinition }> = ({ item }) => {
         backgroundSize: id === 'aurora-glass' ? '100% 100%' : '8px 8px',
       }}
     >
+      {id === 'cyber-terminal' && (
+        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 border-t border-r border-cyan-400/80" />
+      )}
+      {id === 'warm-paper' && (
+        <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-5 h-1 bg-amber-300/70 rotate-[-3deg]" />
+      )}
+      {id === 'aurora-glass' && (
+        <span className="absolute top-0.5 right-1 text-[7px] leading-none text-violet-500">✦</span>
+      )}
+      {id === 'indigo-atelier' && (
+        <span className="absolute top-0.5 right-1 w-2 h-2 rounded-full border border-dashed border-indigo-400/60" />
+      )}
       <div className="flex items-center gap-1">
         <span
           className="w-2.5 h-6 rounded-[3px] border"
@@ -53,7 +65,14 @@ const ThemeMiniPreview: React.FC<{ item: ThemeDefinition }> = ({ item }) => {
               borderColor: item.isDark ? 'rgba(56, 189, 248, 0.28)' : 'rgba(148, 163, 184, 0.25)',
             }}
           />
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-0.5">
+            <span
+              className="inline-block w-2 h-2 rounded-[2px] border"
+              style={{
+                backgroundColor: swatches.surface,
+                borderColor: item.isDark ? 'rgba(34,211,238,0.45)' : 'rgba(148,163,184,0.35)',
+              }}
+            />
             <span
               className="inline-block w-5 h-2 rounded-[3px]"
               style={{
@@ -62,14 +81,16 @@ const ThemeMiniPreview: React.FC<{ item: ThemeDefinition }> = ({ item }) => {
                   id === 'warm-paper'
                     ? '0 1.5px 0 #7c2d12'
                     : id === 'cyber-terminal'
-                      ? '0 0 6px rgba(34,211,238,0.8)'
+                      ? '0 0 6px rgba(34,211,238,0.85)'
                       : 'none',
                 border:
                   id === 'cyber-terminal'
-                    ? '1px solid rgba(165,243,252,0.8)'
+                    ? '1px solid rgba(165,243,252,0.85)'
                     : id === 'warm-paper'
-                      ? '1px dashed rgba(255,247,237,0.7)'
-                      : 'none',
+                      ? '1px dashed rgba(255,247,237,0.75)'
+                      : id === 'aurora-glass'
+                        ? '1px solid rgba(255,255,255,0.75)'
+                        : 'none',
               }}
             />
           </div>

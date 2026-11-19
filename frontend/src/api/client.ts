@@ -18,9 +18,7 @@ import {
   GlobalSettings,
   UpdateGlobalSettingsPayload,
 } from '../types';
-
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
+import { getApiBaseUrl } from './url';
 
 let unauthorizedListener: (() => void) | null = null;
 
@@ -29,7 +27,7 @@ export function setUnauthorizedListener(listener: (() => void) | null) {
 }
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   const headers = new Headers(options.headers);
 
   if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {

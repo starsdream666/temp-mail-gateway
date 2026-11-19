@@ -71,7 +71,7 @@ npm install
 npm run dev
 ```
 
-开发服务器启动于 `http://localhost:5173`。Vite 默认通过反向代理将 `/admin` 与 `/api` 转发至 `http://localhost:8787`，彻底避免浏览器跨域与 Cookie 传输问题。
+开发服务器启动于 `http://localhost:5173`。Vite 默认通过反向代理将 `/admin`、`/api`、`/v1` 与 `/upstream` 转发至 `http://localhost:8787`，管理请求和页面生成的 API 示例均可通过前端地址调用。
 
 > 提示：也可以在项目根目录下直接使用 `npm run frontend:dev` 启动前端。
 
@@ -89,6 +89,8 @@ npm run build
 ```
 
 产物将输出至 `frontend/dist/`。
+
+前后端分离部署时，在前端构建环境中设置 `VITE_API_BASE_URL=https://gateway.example.com`（也支持 `/gateway` 这样的同源路径前缀）。管理请求、API 调用示例及文档链接会共用此地址。该变量在构建时写入产物，修改后需重新构建；跨域部署还需在后端设置 `ADMIN_CORS_ORIGIN` 为前端的确切来源。
 
 ## 验收清单覆盖
 

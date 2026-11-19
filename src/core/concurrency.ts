@@ -30,6 +30,13 @@ export function limitKeyConcurrency(limiter: ConcurrencyLimiter): MiddlewareHand
     try {
       await next();
       const response = c.res;
+      // Hono 用 GET 路由处理 HEAD，随后直接丢弃响应体；不会读取或取消下面的包装流。
+      // HEAD 的处理已结束，立即释放名额，并取消可能存在的原始响应体以回收资源。
+      if (c.req.method === "HEAD") {
+        release();
+        await response.body?.cancel().catch(() => {});
+        return;
+      }
       if (!response.body) { release(); return; }
       const reader = response.body.getReader();
       // 透传响应流结束/取消/失败时释放，避免收到上游响应头就提前释放名额。

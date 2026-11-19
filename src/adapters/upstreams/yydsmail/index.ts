@@ -21,7 +21,7 @@ import {
   filterAfterCursor,
   parseUpstreamDate,
 } from "../_shared/http";
-import { createUpstreamFetch } from "../../../core/upstream-fetch";
+import { createUpstreamFetch, readBoundedText } from "../../../core/upstream-fetch";
 
 /**
  * YYDS Mail API 适配器（https://vip.215.im/docs，OpenAPI 规范见上游 /v1/openapi.json）。
@@ -336,10 +336,30 @@ export class YydsMailAdapter implements UpstreamAdapter {
       this.deps, cfg, `${apiBase(cfg)}${path}`, method,
       { ...this.authHeaders(cfg), ...extraHeaders }, body, endpoint,
     );
-    const env = (await res.json().catch(() => ({}))) as YydsEnvelope<unknown>;
+    let text: string;
+    try {
+      text = await readBoundedText(res);
+    } catch (cause) {
+      throw new UpstreamError("UNAVAILABLE", cfg.id, {
+        message: `上游 ${endpoint} 响应读取失败，无法确认操作结果`, retryable: true, cause,
+      });
+    }
+    // 完整读取后的空删除响应合法；中断、截断或无效 JSON 不能冒充成功。
+    if (method === "DELETE" && !text.trim()) return {};
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch (cause) {
+      throw new UpstreamError("UNKNOWN", cfg.id, { message: `上游 ${endpoint} 返回无效 JSON`, cause });
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new UpstreamError("UNKNOWN", cfg.id, { message: `上游 ${endpoint} 返回无效响应信封` });
+    }
+    const env = parsed as YydsEnvelope<unknown>;
     // 2xx 但信封 success=false（errorCode 如 NOT_FOUND）仍是业务失败——
     // 只查 HTTP 状态会让读/写路径吞掉上游明确报告的失败
     if (env.success === false) throw envelopeFailure(env, cfg.id, endpoint);
+    if (method === "DELETE" && env.success !== true) {
+      throw new UpstreamError("UNKNOWN", cfg.id, { message: `上游 ${endpoint} 未确认删除成功` });
+    }
     return env;
   }
 }

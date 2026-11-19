@@ -62,7 +62,7 @@ export const Login: React.FC = () => {
       </div>
 
       <PageTransition direction="fade" className="relative w-full max-w-md">
-        <div className="w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
+        <div className="theme-login-card w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
         {/* 头部 Logo 与简介 */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl theme-brand-badge text-white mb-4">

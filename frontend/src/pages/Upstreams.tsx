@@ -80,6 +80,8 @@ export const Upstreams: React.FC = () => {
       const [upstreamList, types] = await Promise.all([getUpstreams(), getAdapterTypes()]);
       setUpstreams(upstreamList);
       setAdapterTypes(types);
+      setDetailCache({});
+      setExpandedId(null);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -220,13 +222,9 @@ export const Upstreams: React.FC = () => {
   const handleOpenEdit = async (item: UpstreamSummary, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      // 保证拿到最新 detail (含 settings)
-      let detail = detailCache[item.id];
-      if (!detail) {
-        const fresh = await getUpstream(item.id);
-        detail = fresh;
-        setDetailCache((prev) => ({ ...prev, [item.id]: fresh }));
-      }
+      // 展示缓存不能作为编辑基线：其他标签页可能已修改监控或适配器设置。
+      const detail = await getUpstream(item.id);
+      setDetailCache((prev) => ({ ...prev, [item.id]: detail }));
       setEditingDetail(detail);
       setIsFormOpen(true);
     } catch (err) {

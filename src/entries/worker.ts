@@ -61,12 +61,10 @@ function build(env: WorkerEnv): CachedBuild | undefined {
     ? {
         indexHtml: async (c) => {
           const url = new URL(c.req.url);
-          url.pathname = "/index.html";
-          const res = await env.ASSETS!.fetch(new Request(url, { headers: c.req.raw.headers }));
-          return new Response(res.body, {
-            status: res.status,
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          });
+          // 默认 HTML handling 会把 /index.html 重定向到 /；直接请求规范路径。
+          // 保留资源响应的缓存、ETag 等头，条件请求的 304 也应原样返回。
+          url.pathname = "/";
+          return env.ASSETS!.fetch(new Request(url, { headers: c.req.raw.headers }));
         },
       }
     : undefined;

@@ -120,8 +120,11 @@ export const UpdateUpstreamBody = z
     /** 传 null 表示清除上游 key；缺省保持不变。type 不可修改。 */
     apiKey: z.string().nullable().optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
+    /** 编辑时读取的配置快照；用于合并独立修改和检测同一配置项的冲突。 */
+    expectedSettings: z.record(z.string(), z.unknown()).optional(),
     enabled: z.boolean().optional(),
   })
+  .refine((body) => body.expectedSettings === undefined || body.settings !== undefined, "expectedSettings 需与 settings 一起提交")
   .openapi("UpdateUpstreamBody");
 
 export const UpstreamSummary = z

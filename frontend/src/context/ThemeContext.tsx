@@ -38,8 +38,8 @@ export const THEME_DEFINITIONS: ThemeDefinition[] = [
     id: 'indigo-atelier',
     name: '晴空工坊',
     subtitle: 'INDIGO ATELIER',
-    description: '清透点阵底纹配合微光泽流光按钮，干净利落。',
-    decorationTag: '微点阵 · 流光高光按钮',
+    description: '蓝图星轨与纸飞机航迹背景，搭配双侧微光铆点流光按钮。',
+    decorationTag: '蓝图星轨 · 双铆流光键',
     isDark: false,
     swatches: {
       canvas: '#f8fafc',
@@ -52,8 +52,8 @@ export const THEME_DEFINITIONS: ThemeDefinition[] = [
     id: 'cyber-terminal',
     name: '赛博夜航',
     subtitle: 'CYBER TERMINAL',
-    description: '深邃暗夜科技网格、HUD 准星与青紫霓虹括号按钮。',
-    decorationTag: '科技网格 · 霓虹直角框',
+    description: 'HUD 准星刻度与蜂巢电路背景，搭配霓虹准星框与激光槽按钮。',
+    decorationTag: 'HUD 蜂巢 · 激光准星键',
     isDark: true,
     swatches: {
       canvas: '#070c18',
@@ -66,8 +66,8 @@ export const THEME_DEFINITIONS: ThemeDefinition[] = [
     id: 'warm-paper',
     name: '暖杏手账',
     subtitle: 'WARM PAPER',
-    description: '方格和纸肌理配合赤陶立体压印与手工虚线缝边按键。',
-    decorationTag: '格纹纸感 · 立体压印键',
+    description: '活页孔、复古邮戳与和纸胶带配饰，搭配四角铜铆车缝立体按键。',
+    decorationTag: '邮戳胶带 · 铜铆车缝键',
     isDark: false,
     swatches: {
       canvas: '#faf5ec',
@@ -80,8 +80,8 @@ export const THEME_DEFINITIONS: ThemeDefinition[] = [
     id: 'aurora-glass',
     name: '极光琉璃',
     subtitle: 'AURORA GLASS',
-    description: '漫游极光渐变背景、雾面玻璃卡片与虹彩镜面按钮。',
-    decorationTag: '流光极光 · 磨砂琉璃边',
+    description: '棱镜星钻与极光丝带背景，搭配星芒微光与虹彩镜面琉璃按钮。',
+    decorationTag: '棱镜星钻 · 星芒琉璃键',
     isDark: false,
     swatches: {
       canvas: '#f3f0ff',

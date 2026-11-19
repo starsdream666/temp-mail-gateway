@@ -45,3 +45,4 @@ WEB_FRONTEND_PROMPT.md
 *.log
 .DS_Store
 Thumbs.db
+.pi/

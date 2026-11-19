@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { getApiBaseUrl } from '../api/url';
 import {
   KeyRound,
   Plus,
@@ -23,53 +24,12 @@ import { CopyButton } from '../components/CopyButton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
 import { DomainPicker } from '../components/DomainPicker';
+import { ChannelPicker } from '../components/ChannelPicker';
 import { KeyRateLimitField, keyRateLimitDraft, parseKeyRateLimit } from '../components/KeyRateLimitField';
 import { TableSkeleton } from '../components/Loading';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { formatDateTime } from '../utils/format';
-
-/** 渠道（上游实例）白名单选择器：不勾选任何渠道 = 不限渠道 */
-const ChannelPicker: React.FC<{
-  upstreams: UpstreamSummary[];
-  selected: string[];
-  onChange: (next: string[]) => void;
-}> = ({ upstreams, selected, onChange }) => {
-  const toggle = (id: string) => {
-    onChange(selected.includes(id) ? selected.filter((c) => c !== id) : [...selected, id]);
-  };
-  return (
-    <div className="space-y-1.5">
-      <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-        {upstreams.length === 0 ? (
-          <div className="p-3 text-xs text-slate-400 text-center">暂无上游实例</div>
-        ) : (
-          upstreams.map((u) => (
-            <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selected.includes(u.id)}
-                onChange={() => toggle(u.id)}
-                className="w-3.5 h-3.5 accent-indigo-600"
-              />
-              <span className={`text-xs font-medium flex-1 truncate ${u.enabled ? 'text-slate-700' : 'text-slate-400'}`}>
-                {u.name}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">{u.type}</span>
-              <span className="text-[10px] text-slate-400">{u.domainCount} 域名</span>
-              {!u.enabled && (
-                <span className="text-[10px] text-slate-500 bg-slate-200 rounded px-1 py-0.5 flex-shrink-0">已停用</span>
-              )}
-            </label>
-          ))
-        )}
-      </div>
-      <p className="text-[11px] text-slate-400 leading-relaxed">
-        已限 {selected.length} 个渠道；不勾选 = 不限渠道。渠道限制自动覆盖该渠道后续同步的新域名（域名白名单是静态的，做不到这一点）；两者同时配置时取交集。
-      </p>
-    </div>
-  );
-};
 
 export const ApiKeys: React.FC = () => {
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
@@ -85,6 +45,8 @@ export const ApiKeys: React.FC = () => {
   // 域名/渠道白名单候选（创建/编辑共用）
   const [allDomains, setAllDomains] = useState<AdminDomainInfo[]>([]);
   const [upstreamOptions, setUpstreamOptions] = useState<UpstreamSummary[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
   const [createDomains, setCreateDomains] = useState<string[]>([]);
   const [createChannels, setCreateChannels] = useState<string[]>([]);
   const [createRateLimit, setCreateRateLimit] = useState(() => keyRateLimitDraft(null));
@@ -173,13 +135,15 @@ export const ApiKeys: React.FC = () => {
 
   // 拉取域名/渠道候选（失败不阻断主流程）
   const loadPickerData = useCallback(async () => {
+    setPickerLoading(true);
+    setPickerError(null);
     try {
       const [domains, upstreams] = await Promise.all([getAllDomains(), getUpstreams()]);
       setAllDomains(domains);
       setUpstreamOptions(upstreams);
-    } catch {
-      /* 候选加载失败不阻断 */
-    }
+    } catch (err) {
+      setPickerError((err as Error).message || '请稍后重试');
+    } finally { setPickerLoading(false); }
   }, []);
 
   // 打开签发弹窗
@@ -530,7 +494,7 @@ export const ApiKeys: React.FC = () => {
               <Server className="w-3.5 h-3.5 text-indigo-600" />
               <span>渠道限制（可选）</span>
             </label>
-            <ChannelPicker upstreams={upstreamOptions} selected={createChannels} onChange={setCreateChannels} />
+            <ChannelPicker upstreams={upstreamOptions} selected={createChannels} onChange={setCreateChannels} loading={pickerLoading} error={pickerError} onRetry={loadPickerData} />
           </div>
         </form>
       </Modal>
@@ -591,7 +555,7 @@ export const ApiKeys: React.FC = () => {
                 <span>调用方式说明</span>
               </div>
               <p className="font-mono text-[11px] text-slate-500 bg-white p-2 rounded border border-slate-200">
-                curl -H "Authorization: Bearer {revealedKey.key}" {window.location.origin}/v1/mailboxes
+                curl -H "Authorization: Bearer {revealedKey.key}" {getApiBaseUrl()}/v1/mailboxes
               </p>
             </div>
           </div>
@@ -648,7 +612,7 @@ export const ApiKeys: React.FC = () => {
               <Server className="w-3.5 h-3.5 text-indigo-600" />
               <span>渠道限制（可选）</span>
             </label>
-            <ChannelPicker upstreams={upstreamOptions} selected={editChannels} onChange={setEditChannels} />
+            <ChannelPicker upstreams={upstreamOptions} selected={editChannels} onChange={setEditChannels} loading={pickerLoading} error={pickerError} onRetry={loadPickerData} />
           </div>
         </form>
       </Modal>

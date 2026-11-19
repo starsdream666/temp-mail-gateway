@@ -115,23 +115,41 @@ body {
   }
 }
 
+@keyframes sparklePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+  }
+}
+
+.theme-sparkle-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sparklePulse 4.6s ease-in-out infinite;
+}
+
 .theme-backdrop-dotgrid {
-  background-image: radial-gradient(rgba(79, 70, 229, 0.11) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(79, 70, 229, 0.12) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 
 .theme-backdrop-cybergrid {
   background-image:
-    linear-gradient(to right, rgba(34, 211, 238, 0.065) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(34, 211, 238, 0.065) 1px, transparent 1px);
+    linear-gradient(to right, rgba(34, 211, 238, 0.068) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.068) 1px, transparent 1px);
   background-size: 36px 36px;
 }
 
 .theme-backdrop-cyberscan {
   background-image: repeating-linear-gradient(
     0deg,
-    rgba(34, 211, 238, 0.02) 0px,
-    rgba(34, 211, 238, 0.02) 1px,
+    rgba(34, 211, 238, 0.022) 0px,
+    rgba(34, 211, 238, 0.022) 1px,
     transparent 1px,
     transparent 4px
   );
@@ -139,13 +157,154 @@ body {
 
 .theme-backdrop-papergrid {
   background-image:
-    linear-gradient(to right, rgba(180, 130, 80, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(180, 130, 80, 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgba(180, 130, 80, 0.075) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(180, 130, 80, 0.075) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 .theme-aurora-blob {
   animation: auroraDrift 16s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   页面主标题（main h1）专属主题配饰
+   -------------------------------------------------------------------------- */
+main h1 {
+  position: relative;
+}
+
+[data-theme='indigo-atelier'] main h1::after {
+  content: '';
+  display: inline-block;
+  width: 26px;
+  height: 4px;
+  margin-left: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #4f46e5 0%, #38bdf8 70%, transparent 100%);
+  opacity: 0.75;
+  vertical-align: middle;
+}
+
+[data-theme='cyber-terminal'] main h1::after {
+  content: '// SYS';
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.38);
+  border-radius: 4px;
+  background: rgba(6, 182, 212, 0.1);
+  box-shadow: 0 0 10px -2px rgba(34, 211, 238, 0.45);
+}
+
+[data-theme='warm-paper'] main h1::after {
+  content: '✦';
+  margin-left: 6px;
+  font-size: 13px;
+  color: #d97706;
+  opacity: 0.75;
+}
+
+[data-theme='aurora-glass'] main h1::after {
+  content: '✧';
+  margin-left: 6px;
+  font-size: 14px;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   卡片与登录面板专属配饰（角标 / 和纸胶带 / 琉璃冠冕光带 / 蓝图细线）
+   -------------------------------------------------------------------------- */
+main .rounded-2xl.bg-white.border,
+.theme-login-card {
+  position: relative;
+}
+
+/* 晴空工坊卡片：顶部蓝图光轴细线配饰 */
+[data-theme='indigo-atelier'] main .rounded-2xl.bg-white.border::before,
+[data-theme='indigo-atelier'] .theme-login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent 0%, rgba(99, 102, 241, 0.35) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+/* 赛博夜航卡片：对角激光战术刻度角标 */
+[data-theme='cyber-terminal'] main .rounded-2xl.bg-white.border::after,
+[data-theme='cyber-terminal'] .theme-login-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(#22d3ee, #22d3ee) 0 0 / 14px 1.5px no-repeat,
+    linear-gradient(#22d3ee, #22d3ee) 0 0 / 1.5px 14px no-repeat,
+    linear-gradient(#818cf8, #818cf8) 100% 100% / 14px 1.5px no-repeat,
+    linear-gradient(#818cf8, #818cf8) 100% 100% / 1.5px 14px no-repeat;
+  opacity: 0.72;
+}
+
+/* 暖杏手账：登录卡片顶部斜贴和纸胶带 + 内容卡片书签角标 */
+[data-theme='warm-paper'] .theme-login-card::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 92px;
+  height: 22px;
+  transform: translateX(-50%) rotate(-2deg);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(234, 88, 12, 0.22) 0px,
+    rgba(234, 88, 12, 0.22) 6px,
+    rgba(254, 243, 199, 0.72) 6px,
+    rgba(254, 243, 199, 0.72) 12px
+  );
+  border-left: 1px dashed rgba(154, 52, 18, 0.35);
+  border-right: 1px dashed rgba(154, 52, 18, 0.35);
+  box-shadow: 0 2px 6px rgba(120, 80, 40, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+[data-theme='warm-paper'] main .rounded-2xl.bg-white.border::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border-top: 1.5px solid rgba(194, 65, 12, 0.32);
+  border-right: 1.5px solid rgba(194, 65, 12, 0.32);
+  border-top-right-radius: 6px;
+  pointer-events: none;
+}
+
+/* 极光琉璃卡片：顶部虹彩棱镜折射冠线 */
+[data-theme='aurora-glass'] main .rounded-2xl.bg-white.border::before,
+[data-theme='aurora-glass'] .theme-login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.55) 30%, rgba(6, 182, 212, 0.55) 70%, transparent 100%);
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -159,15 +318,32 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   isolation: isolate;
 }
 
-/* 1) 晴空工坊：顶部内高光 + 悬停斜向流光扫过 */
+/* 1) 晴空工坊主按钮：双侧精密微光铆点 + 顶部晶透高光 + 悬停斜向流光 */
 [data-theme='indigo-atelier'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed),
 [data-theme='indigo-atelier'] a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='indigo-atelier'] .theme-btn-primary {
-  background-image: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background-image: linear-gradient(135deg, #4338ca 0%, #4f46e5 48%, #6366f1 100%);
+  border: 1px solid rgba(199, 210, 254, 0.35);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 8px 18px -6px rgba(79, 70, 229, 0.42);
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -2px 0 rgba(30, 27, 75, 0.22),
+    0 8px 18px -6px rgba(79, 70, 229, 0.46);
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, filter 180ms ease;
+}
+
+[data-theme='indigo-atelier'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::before,
+[data-theme='indigo-atelier'] a.bg-indigo-600:not(.absolute):not(.fixed)::before,
+[data-theme='indigo-atelier'] .theme-btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: calc(0.75rem - 4px);
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgba(224, 231, 255, 0.85) 1.4px, transparent 1.6px) 4px 50% / 6px 6px no-repeat,
+    radial-gradient(circle, rgba(224, 231, 255, 0.85) 1.4px, transparent 1.6px) calc(100% - 4px) 50% / 6px 6px no-repeat,
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent) 50% 0 / 70% 1px no-repeat;
+  opacity: 0.85;
 }
 
 [data-theme='indigo-atelier'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::after,
@@ -177,7 +353,7 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   position: absolute;
   inset: 0;
   width: 45%;
-  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.28) 50%, transparent 100%);
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.32) 50%, transparent 100%);
   transform: translateX(-160%) skewX(-18deg);
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
@@ -194,20 +370,21 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='indigo-atelier'] .theme-btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 12px 24px -6px rgba(79, 70, 229, 0.52);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 0 rgba(30, 27, 75, 0.25),
+    0 12px 24px -6px rgba(79, 70, 229, 0.56);
 }
 
-/* 2) 赛博夜航：霓虹青紫底 + 四角发光直角括号装饰 */
+/* 2) 赛博夜航主按钮：霓虹青紫底 + 四角 HUD 准星框 + 底部激光能量脉冲槽 */
 [data-theme='cyber-terminal'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed),
 [data-theme='cyber-terminal'] a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='cyber-terminal'] .theme-btn-primary {
-  background-image: linear-gradient(135deg, #0891b2 0%, #2563eb 52%, #4f46e5 100%);
-  border: 1px solid rgba(34, 211, 238, 0.55);
+  background-image: linear-gradient(135deg, #0891b2 0%, #2563eb 50%, #4f46e5 100%);
+  border: 1px solid rgba(34, 211, 238, 0.6);
   color: #f0fdff;
   box-shadow:
-    0 0 18px -4px rgba(6, 182, 212, 0.65),
-    inset 0 1px 0 rgba(165, 243, 252, 0.35);
+    0 0 18px -4px rgba(6, 182, 212, 0.7),
+    inset 0 1px 0 rgba(165, 243, 252, 0.4);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
@@ -219,26 +396,41 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   inset: 3px;
   pointer-events: none;
   border-radius: calc(0.75rem - 4px);
-  opacity: 0.9;
+  opacity: 0.95;
   transition: inset 180ms ease, opacity 180ms ease;
   background:
-    linear-gradient(#67e8f9, #67e8f9) 0 0 / 7px 1.5px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 0 0 / 1.5px 7px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 100% 0 / 7px 1.5px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 100% 0 / 1.5px 7px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 0 100% / 7px 1.5px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 0 100% / 1.5px 7px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 100% 100% / 7px 1.5px no-repeat,
-    linear-gradient(#67e8f9, #67e8f9) 100% 100% / 1.5px 7px no-repeat;
+    linear-gradient(#67e8f9, #67e8f9) 0 0 / 8px 1.6px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 0 0 / 1.6px 8px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 100% 0 / 8px 1.6px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 100% 0 / 1.6px 8px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 0 100% / 8px 1.6px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 0 100% / 1.6px 8px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 100% 100% / 8px 1.6px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 100% 100% / 1.6px 8px no-repeat;
+}
+
+[data-theme='cyber-terminal'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::after,
+[data-theme='cyber-terminal'] a.bg-indigo-600:not(.absolute):not(.fixed)::after,
+[data-theme='cyber-terminal'] .theme-btn-primary::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 18%;
+  right: 18%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #a5f3fc, #c084fc, transparent);
+  box-shadow: 0 0 8px #22d3ee;
+  transition: left 200ms ease, right 200ms ease;
+  pointer-events: none;
 }
 
 [data-theme='cyber-terminal'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed):hover:not(:disabled),
 [data-theme='cyber-terminal'] a.bg-indigo-600:not(.absolute):not(.fixed):hover,
 [data-theme='cyber-terminal'] .theme-btn-primary:hover:not(:disabled) {
-  border-color: rgba(103, 232, 249, 0.95);
+  border-color: rgba(103, 232, 249, 0.98);
   box-shadow:
-    0 0 26px -2px rgba(34, 211, 238, 0.78),
-    inset 0 1px 0 rgba(207, 250, 254, 0.5);
+    0 0 28px -2px rgba(34, 211, 238, 0.85),
+    inset 0 1px 0 rgba(207, 250, 254, 0.55);
   transform: translateY(-1px);
 }
 
@@ -249,7 +441,14 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   opacity: 1;
 }
 
-/* 3) 暖杏手账：赤陶暖橘 + 手工虚线缝边 + 立体按键压边 */
+[data-theme='cyber-terminal'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed):hover:not(:disabled)::after,
+[data-theme='cyber-terminal'] a.bg-indigo-600:not(.absolute):not(.fixed):hover::after,
+[data-theme='cyber-terminal'] .theme-btn-primary:hover:not(:disabled)::after {
+  left: 6%;
+  right: 6%;
+}
+
+/* 3) 暖杏手账主按钮：赤陶暖橘 + 手工车缝虚线 + 四角黄铜铆点 + 立体压印按键 */
 [data-theme='warm-paper'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed),
 [data-theme='warm-paper'] a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='warm-paper'] .theme-btn-primary {
@@ -258,7 +457,7 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   color: #fffbf5;
   box-shadow:
     0 3px 0 #7c2d12,
-    0 8px 16px -6px rgba(154, 52, 18, 0.35);
+    0 8px 16px -6px rgba(154, 52, 18, 0.38);
   transition: transform 120ms ease, box-shadow 120ms ease, filter 150ms ease;
 }
 
@@ -268,9 +467,23 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   content: '';
   position: absolute;
   inset: 3px;
-  border: 1px dashed rgba(255, 247, 237, 0.48);
+  border: 1px dashed rgba(255, 247, 237, 0.56);
   border-radius: calc(0.75rem - 4px);
   pointer-events: none;
+}
+
+[data-theme='warm-paper'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::after,
+[data-theme='warm-paper'] a.bg-indigo-600:not(.absolute):not(.fixed)::after,
+[data-theme='warm-paper'] .theme-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgba(254, 243, 199, 0.85) 1.3px, transparent 1.5px) 0 0 / 5px 5px no-repeat,
+    radial-gradient(circle, rgba(254, 243, 199, 0.85) 1.3px, transparent 1.5px) 100% 0 / 5px 5px no-repeat,
+    radial-gradient(circle, rgba(254, 243, 199, 0.85) 1.3px, transparent 1.5px) 0 100% / 5px 5px no-repeat,
+    radial-gradient(circle, rgba(254, 243, 199, 0.85) 1.3px, transparent 1.5px) 100% 100% / 5px 5px no-repeat;
 }
 
 [data-theme='warm-paper'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed):hover:not(:disabled),
@@ -280,7 +493,7 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   transform: translateY(-1px);
   box-shadow:
     0 4px 0 #7c2d12,
-    0 10px 18px -6px rgba(154, 52, 18, 0.42);
+    0 10px 18px -6px rgba(154, 52, 18, 0.44);
 }
 
 [data-theme='warm-paper'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed):active:not(:disabled),
@@ -290,17 +503,32 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   box-shadow: 0 1px 0 #7c2d12;
 }
 
-/* 4) 极光琉璃：紫青流光渐变 + 晶莹内高光 + 扫光效果 */
+/* 4) 极光琉璃主按钮：紫青粉三色流光 + 内嵌水晶光泽环 + 右上星芒微光 + 镜面扫光 */
 [data-theme='aurora-glass'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed),
 [data-theme='aurora-glass'] a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='aurora-glass'] .theme-btn-primary {
-  background-image: linear-gradient(135deg, #7c3aed 0%, #6366f1 52%, #0ea5e9 100%);
-  border: 1px solid rgba(255, 255, 255, 0.46);
+  background-image: linear-gradient(135deg, #7c3aed 0%, #6366f1 46%, #06b6d4 100%);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   color: #ffffff;
   box-shadow:
-    0 10px 24px -6px rgba(124, 58, 237, 0.44),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    0 10px 24px -6px rgba(124, 58, 237, 0.46),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(14, 165, 233, 0.4);
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease;
+}
+
+[data-theme='aurora-glass'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::before,
+[data-theme='aurora-glass'] a.bg-indigo-600:not(.absolute):not(.fixed)::before,
+[data-theme='aurora-glass'] .theme-btn-primary::before {
+  content: '✦';
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  font-size: 9px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
 }
 
 [data-theme='aurora-glass'] button.bg-indigo-600:not([role='switch']):not(.absolute):not(.fixed)::after,
@@ -310,7 +538,7 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
   position: absolute;
   inset: 0;
   width: 48%;
-  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.34) 50%, transparent 100%);
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.38) 50%, transparent 100%);
   transform: translateX(-160%) skewX(-18deg);
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
@@ -327,13 +555,155 @@ a.bg-indigo-600:not(.absolute):not(.fixed),
 [data-theme='aurora-glass'] .theme-btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow:
-    0 14px 28px -6px rgba(14, 165, 233, 0.44),
-    0 0 16px -4px rgba(168, 85, 247, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 14px 28px -6px rgba(14, 165, 233, 0.48),
+    0 0 18px -4px rgba(168, 85, 247, 0.5),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.8);
 }
 
 /* --------------------------------------------------------------------------
-   侧边栏导航激活项装饰
+   危险按钮（bg-rose-600）与次要按钮、表格操作按钮专属装饰
+   -------------------------------------------------------------------------- */
+button.bg-rose-600:not(.absolute):not(.fixed) {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme='indigo-atelier'] button.bg-rose-600:not(.absolute):not(.fixed) {
+  background-image: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px -6px rgba(225, 29, 72, 0.42);
+}
+
+/* 赛博夜航危险按钮：底部红黑斜向战术警戒条纹装饰 */
+[data-theme='cyber-terminal'] button.bg-rose-600:not(.absolute):not(.fixed) {
+  background-image: linear-gradient(135deg, #be123c 0%, #e11d48 100%);
+  border: 1px solid rgba(251, 113, 133, 0.65);
+  box-shadow: 0 0 18px -4px rgba(244, 63, 94, 0.65);
+}
+
+[data-theme='cyber-terminal'] button.bg-rose-600:not(.absolute):not(.fixed)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(254, 205, 211, 0.85) 0px,
+    rgba(254, 205, 211, 0.85) 4px,
+    rgba(136, 19, 55, 0.9) 4px,
+    rgba(136, 19, 55, 0.9) 8px
+  );
+  pointer-events: none;
+}
+
+/* 暖杏手账危险按钮：胭脂印泥立体压印 + 内嵌虚线 */
+[data-theme='warm-paper'] button.bg-rose-600:not(.absolute):not(.fixed) {
+  background-image: linear-gradient(180deg, #e11d48 0%, #be123c 100%);
+  border: 1px solid #881337;
+  box-shadow: 0 3px 0 #881337, 0 8px 14px -6px rgba(136, 19, 55, 0.35);
+}
+
+[data-theme='warm-paper'] button.bg-rose-600:not(.absolute):not(.fixed)::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed rgba(255, 228, 230, 0.5);
+  border-radius: calc(0.5rem - 2px);
+  pointer-events: none;
+}
+
+/* 极光琉璃危险按钮：玫瑰冰晶渐变 */
+[data-theme='aurora-glass'] button.bg-rose-600:not(.absolute):not(.fixed) {
+  background-image: linear-gradient(135deg, #e11d48 0%, #db2777 100%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 10px 20px -6px rgba(225, 29, 72, 0.4);
+}
+
+/* 次要按钮（白底边框按钮）四套主题差异化装饰 */
+button.bg-white.border:not([role='switch']):not(.theme-swatch-card):not(.absolute):not(.fixed),
+a.bg-white.border:not(.absolute):not(.fixed) {
+  position: relative;
+}
+
+/* 晴空工坊次要按钮：右上角斜角标刻与底部微托边 */
+[data-theme='indigo-atelier'] button.bg-white.border:not([role='switch']):not(.theme-swatch-card):not(.absolute):not(.fixed),
+[data-theme='indigo-atelier'] a.bg-white.border:not(.absolute):not(.fixed) {
+  box-shadow:
+    inset 0 -1.5px 0 rgba(203, 213, 225, 0.55),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+  background-image: linear-gradient(225deg, rgba(99, 102, 241, 0.14) 0px, rgba(99, 102, 241, 0.14) 5px, transparent 5px);
+}
+
+[data-theme='indigo-atelier'] button.bg-white.border:not([role='switch']):not(.theme-swatch-card):not(.absolute):not(.fixed):hover:not(:disabled),
+[data-theme='indigo-atelier'] a.bg-white.border:not(.absolute):not(.fixed):hover {
+  border-color: #a5b4fc;
+  background-image: linear-gradient(225deg, rgba(79, 70, 229, 0.28) 0px, rgba(79, 102, 241, 0.28) 6px, transparent 6px);
+}
+
+/* 赛博夜航次要按钮：左上青色激光斜角切标 + 霓虹微光 */
+[data-theme='cyber-terminal'] button.bg-white.border:not([role='switch']):not(.theme-swatch-card):not(.absolute):not(.fixed),
+[data-theme='cyber-terminal'] a.bg-white.border:not(.absolute):not(.fixed) {
+  background-image:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.42) 0px, rgba(34, 211, 238, 0.42) 5px, transparent 5px);
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.16);
+}
+
+/* 暖杏手账次要按钮：右上角折页三角纹理 */
+[data-theme='warm-paper'] button.bg-white.border:not([role='switch']):not(.theme-swatch-card):not(.absolute):not(.fixed)::after,
+[data-theme='warm-paper'] a.bg-white.border:not(.absolute):not(.fixed)::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid rgba(194, 65, 12, 0.35);
+  border-right: 1.5px solid rgba(194, 65, 12, 0.35);
+  border-top-right-radius: 3px;
+  pointer-events: none;
+}
+
+/* 表格与工具栏内联轮廓动作按钮装饰增强 */
+[data-theme='cyber-terminal'] td button.border-indigo-200,
+[data-theme='cyber-terminal'] td button.border-slate-200 {
+  box-shadow: inset 0 0 10px -4px rgba(34, 211, 238, 0.35);
+}
+
+[data-theme='cyber-terminal'] td button.border-rose-200 {
+  box-shadow: inset 0 0 10px -4px rgba(244, 63, 94, 0.4);
+}
+
+[data-theme='warm-paper'] td button.border-indigo-200,
+[data-theme='warm-paper'] td button.border-slate-200,
+[data-theme='warm-paper'] td button.border-rose-200 {
+  box-shadow: 0 1.5px 0 rgba(146, 64, 14, 0.16);
+}
+
+/* 侧边栏折叠圆形按钮主题专属装饰 */
+[data-theme='cyber-terminal'] aside > button[aria-expanded] {
+  border-color: rgba(34, 211, 238, 0.45);
+  box-shadow: 0 0 12px -2px rgba(34, 211, 238, 0.55);
+}
+
+[data-theme='warm-paper'] aside > button[aria-expanded] {
+  background-color: #fffbf2;
+  border-color: #d6c1a5;
+  box-shadow: 0 2px 0 rgba(154, 52, 18, 0.22);
+}
+
+[data-theme='aurora-glass'] aside > button[aria-expanded] {
+  background-color: rgba(255, 255, 255, 0.88);
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow: 0 4px 12px -2px rgba(124, 58, 237, 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   侧边栏导航激活项配饰（左侧发光指示条 + 右侧主题徽记）
    -------------------------------------------------------------------------- */
 aside nav a[aria-current='page']::before {
   content: '';
@@ -348,9 +718,32 @@ aside nav a[aria-current='page']::before {
   transition: all 200ms ease;
 }
 
+aside:not(.md\:w-\[76px\]) nav a[aria-current='page']::after {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+[data-theme='indigo-atelier'] aside:not(.md\:w-\[76px\]) nav a[aria-current='page']::after {
+  content: '◆';
+  font-size: 8px;
+  color: #6366f1;
+}
+
 [data-theme='cyber-terminal'] aside nav a[aria-current='page']::before {
   background-color: #22d3ee;
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.9);
+}
+
+[data-theme='cyber-terminal'] aside:not(.md\:w-\[76px\]) nav a[aria-current='page']::after {
+  content: '◈';
+  color: #22d3ee;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
 }
 
 [data-theme='warm-paper'] aside nav a[aria-current='page']::before {
@@ -361,9 +754,20 @@ aside nav a[aria-current='page']::before {
   box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.18);
 }
 
+[data-theme='warm-paper'] aside:not(.md\:w-\[76px\]) nav a[aria-current='page']::after {
+  content: '❧';
+  font-size: 12px;
+  color: #c2410c;
+}
+
 [data-theme='aurora-glass'] aside nav a[aria-current='page']::before {
   background-image: linear-gradient(180deg, #a855f7, #06b6d4);
   box-shadow: 0 0 8px rgba(124, 58, 237, 0.45);
+}
+
+[data-theme='aurora-glass'] aside:not(.md\:w-\[76px\]) nav a[aria-current='page']::after {
+  content: '✦';
+  color: #8b5cf6;
 }
 
 /* --------------------------------------------------------------------------
@@ -906,7 +1310,8 @@ aside nav a[aria-current='page']::before {
    减弱动态效果无障碍适配
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .theme-aurora-blob {
+  .theme-aurora-blob,
+  .theme-sparkle-pulse {
     animation: none !important;
   }
 

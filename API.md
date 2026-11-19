@@ -242,6 +242,10 @@ messages = requests.get(
 - `/admin/*` 是管理后台 API，使用签名 HttpOnly Cookie 会话，不应拿网关 API Key 调用，也不应作为普通业务集成接口。
 - 管理后台的“API 调用”页面提供人类可读、可复制的示例；`/api/doc` 是自动生成的完整 OpenAPI 真值。
 
+### 上游配置并发编辑
+
+`PUT /admin/upstreams/{id}` 编辑 `settings` 时，可同时提交 `expectedSettings`，内容为打开编辑时读取的配置快照。网关按顶层配置项合并改动：不同配置项的并发修改会保留，同一配置项被改成不同值则返回 `409 CONFLICT`，本次请求的其他字段也不会部分保存。删除字段通过从 `settings` 对象中移除该字段表达，`null` 仍表示实际配置值。管理后台自动提交此快照；未提供快照的旧客户端保持整体替换语义。
+
 ### 管理端 Key 限流配置
 
 使用管理员会话 Cookie 调用 `POST /admin/keys`（签发）或 `PATCH /admin/keys/{id}`（更新），请求体可带 `mailboxesPerHour`：
@@ -262,3 +266,5 @@ messages = requests.get(
 `POST /admin/mailboxes/import` 需要管理员会话，body 为 `{addresses: string[], apiKeyId?: string | null, upstreamId?: string}`。
 
 未指定来源渠道时检查同域名的启用候选，确认唯一命中后登记。多个命中，或部分候选查询失败而无法排除歧义，逐地址返回 `UPSTREAM_REQUIRED`；可指定 `upstreamId` 后重试。指定不存在的渠道返回 404；停用渠道或停用域名不会被用于纳管。返回仍为 `{imported, failed}`，地址之间独立结算。
+
+MoeMail 反查最多读取 20 页。达到上限仍有后续页，或游标循环、列表格式无效时，按查询未完成处理，不能用于排除该渠道；仅完整查完且未命中时报告不存在。

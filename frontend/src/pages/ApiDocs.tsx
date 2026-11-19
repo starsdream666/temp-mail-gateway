@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getApiBaseUrl } from '../api/url';
 import {
   AlertTriangle,
   BookOpen,
@@ -223,7 +224,7 @@ function EndpointCard({ endpoint, baseUrl, apiKey }: { endpoint: Endpoint; baseU
 }
 
 export const ApiDocs: React.FC = () => {
-  const defaultBaseUrl = typeof window === 'undefined' ? 'http://localhost:8787' : window.location.origin;
+  const defaultBaseUrl = getApiBaseUrl();
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl);
   const [apiKey, setApiKey] = useState('');
   const [filter, setFilter] = useState<'ALL' | Method>('ALL');
@@ -243,10 +244,10 @@ export const ApiDocs: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <a href="/api/ui" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+          <a href={`${normalizedBase}/api/ui`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
             Swagger UI <ExternalLink className="h-4 w-4" />
           </a>
-          <a href="/api/doc" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+          <a href={`${normalizedBase}/api/doc`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
             OpenAPI JSON <Braces className="h-4 w-4" />
           </a>
         </div>

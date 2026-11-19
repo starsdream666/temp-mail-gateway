@@ -7,11 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/admin': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-      },
-      '/api': {
+      // 按路径段匹配，避免 /api-docs 和 /upstreams 前端路由被代理吞掉。
+      '^/(?:admin|api|v1|upstream)(?:/|$)': {
         target: 'http://localhost:8787',
         changeOrigin: true,
       },

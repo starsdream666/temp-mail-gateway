@@ -8,6 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../components/Toast';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingSpinner } from '../components/Loading';
+import { parseIntervalSeconds, secondsToMilliseconds } from '../utils/interval';
 
 const inputClass = 'w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 disabled:bg-slate-50 disabled:text-slate-400';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden';
@@ -61,9 +62,9 @@ export const Settings: React.FC = () => {
   const runtimeDirty = !!saved && (
     cleanupEnabled !== saved.mailboxCleanupEnabled
     || cleanupImmediate !== saved.mailboxCleanupImmediate
-    || (cleanupEnabled && !cleanupImmediate && (!cleanupIntervalSeconds || Number(cleanupIntervalSeconds) * 1000 !== saved.mailboxCleanupIntervalMs))
+    || (cleanupEnabled && !cleanupImmediate && secondsToMilliseconds(cleanupIntervalSeconds) !== saved.mailboxCleanupIntervalMs)
     || healthEnabled !== saved.healthCheckEnabled
-    || Number(intervalSeconds) * 1000 !== saved.healthCheckIntervalMs
+    || secondsToMilliseconds(intervalSeconds) !== saved.healthCheckIntervalMs
     || Number(hourlyLimit) !== saved.mailboxesPerKeyPerHour
     || Number(concurrency) !== saved.maxConcurrentRequestsPerKey
     || !intervalSeconds || !hourlyLimit || !concurrency
@@ -85,10 +86,10 @@ export const Settings: React.FC = () => {
         mailboxCleanupEnabled: cleanupEnabled,
         mailboxCleanupImmediate: cleanupImmediate,
         mailboxCleanupIntervalMs: cleanupEnabled && !cleanupImmediate
-          ? numberValue(cleanupIntervalSeconds ? String(Number(cleanupIntervalSeconds) * 1000) : '', '清理间隔（毫秒）', 60_000, 86_400_000)
+          ? parseIntervalSeconds(cleanupIntervalSeconds, '清理间隔')
           : saved.mailboxCleanupIntervalMs,
         healthCheckEnabled: healthEnabled,
-        healthCheckIntervalMs: numberValue(intervalSeconds ? String(Number(intervalSeconds) * 1000) : '', '验活间隔（毫秒）', 60_000, 86_400_000),
+        healthCheckIntervalMs: parseIntervalSeconds(intervalSeconds, '验活间隔'),
         mailboxesPerKeyPerHour: numberValue(hourlyLimit, '每小时建箱上限'),
         maxConcurrentRequestsPerKey: numberValue(concurrency, '并发上限'),
       };

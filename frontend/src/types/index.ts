@@ -68,6 +68,7 @@ export interface UpdateUpstreamPayload {
   baseUrl?: string;
   apiKey?: string | null;
   settings?: Record<string, unknown>;
+  expectedSettings?: Record<string, unknown>;
   enabled?: boolean;
 }
 

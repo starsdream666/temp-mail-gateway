@@ -108,6 +108,13 @@ export function createDrizzleStores(
       await db.update(s.upstreams).set(patch).where(eq(s.upstreams.id, id));
     },
 
+    async updateIfSettingsMatch(id, patch, expected) {
+      const rows = await db.update(s.upstreams).set(patch)
+        .where(and(eq(s.upstreams.id, id), eq(s.upstreams.settingsJson, expected)))
+        .returning({ id: s.upstreams.id });
+      return rows.length > 0;
+    },
+
     async delete(id) {
       const count = await countMailboxes(db, id);
       if (count > 0) {

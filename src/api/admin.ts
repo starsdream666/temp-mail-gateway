@@ -14,6 +14,7 @@ import { RateLimiter } from "../core/ratelimit";
 import type { GatewayConfig } from "../core/app";
 import { registerSettingsRoutes } from "./settings";
 import { runMailboxCleanup } from "../core/mailbox-cleanup";
+import { updateUpstreamWithSettings } from "../core/upstream-settings";
 import { runHealthChecks, effectiveMonitorIntervalMs, autoSyncDomainsEnabled, HEALTH_HISTORY_KEEP } from "../core/monitor";
 import { UpstreamError, type MailboxRef } from "../ports/upstream";
 import type { UpstreamWithDomain } from "../ports/stores";
@@ -244,7 +245,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
       method: "put",
       path: "/admin/upstreams/{id}",
       tags: ["admin"],
-      summary: "更新上游（apiKey 未传则保持不变；显式传 null 清除）",
+      summary: "更新上游（apiKey 未传则保持不变；expectedSettings 用于合并并发配置修改）",
       request: {
         params: IdParams,
         body: { content: { "application/json": { schema: UpdateUpstreamBody } }, required: true },
@@ -254,6 +255,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
         400: errResp("参数不合法"),
         401: errResp("未登录"),
         404: errResp("不存在"),
+        409: errResp("同一配置项已被其他操作修改，请读取最新配置后重试"),
       },
     }),
     async (c) => {
@@ -262,14 +264,19 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
       const existing = await stores.upstreams.get(id);
       if (!existing) throw new AppError("NOT_FOUND", `上游不存在: ${id}`);
 
-      await stores.upstreams.update(id, {
+      const patch = {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.baseUrl !== undefined && { baseUrl: body.baseUrl.replace(/\/+$/, "") }),
         ...(body.enabled !== undefined && { enabled: body.enabled }),
         ...(body.settings !== undefined && { settingsJson: body.settings }),
         ...(body.apiKey === null && { apiKeyEnc: null }),
         ...(body.apiKey ? { apiKeyEnc: await crypto.encrypt(body.apiKey) } : {}),
-      });
+      };
+      if (body.settings !== undefined && body.expectedSettings !== undefined) {
+        await updateUpstreamWithSettings(stores.upstreams, id, { ...patch, settingsJson: body.settings }, body.expectedSettings);
+      } else {
+        await stores.upstreams.update(id, patch);
+      }
 
       const detail = await upstreamDetail(stores, id);
       return c.json({ upstream: detail }, 200);
@@ -421,6 +428,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
         400: errResp("参数不合法"),
         401: errResp("未登录"),
         404: errResp("上游不存在"),
+        409: errResp("同一配置项已被其他操作修改，请重试"),
       },
     }),
     async (c) => {
@@ -447,7 +455,7 @@ export function registerAdminRoutes(app: OpenAPIHono<Env>, deps: AdminDeps): voi
         if (body.autoSyncDomains) delete settings.autoSyncDomains;
         else settings.autoSyncDomains = false;
       }
-      await stores.upstreams.update(id, { settingsJson: settings });
+      await updateUpstreamWithSettings(stores.upstreams, id, { settingsJson: settings }, row.settingsJson);
 
       const updated = await stores.upstreams.get(id);
       return c.json(

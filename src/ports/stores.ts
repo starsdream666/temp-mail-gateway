@@ -88,9 +88,13 @@ export interface ApiKeyRow {
   createdAt: Date;
 }
 
+export type UpstreamPatch = Partial<Pick<UpstreamRow, "name" | "baseUrl" | "apiKeyEnc" | "settingsJson" | "enabled">>;
+
 export interface UpstreamStore {
   create(input: NewUpstream): Promise<UpstreamRow>;
-  update(id: string, patch: Partial<Pick<UpstreamRow, "name" | "baseUrl" | "apiKeyEnc" | "settingsJson" | "enabled">>): Promise<void>;
+  update(id: string, patch: UpstreamPatch): Promise<void>;
+  /** 在同一条 UPDATE 中比对配置快照；false 表示已被其他请求修改或删除。 */
+  updateIfSettingsMatch(id: string, patch: UpstreamPatch, expected: Record<string, unknown>): Promise<boolean>;
   /** 有存活邮箱时抛 StoreError("UPSTREAM_IN_USE") */
   delete(id: string): Promise<void>;
   get(id: string): Promise<UpstreamRow | null>;

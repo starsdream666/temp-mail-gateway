@@ -238,6 +238,7 @@ export class MoeMailAdapter implements UpstreamAdapter {
     // /api/emails 是游标分页（上游 PAGE_SIZE=20），必须翻页找——只看第一页的话，
     // 账号下邮箱超过 20 个时会把存在的地址误报成「不存在」。
     let cursor: string | null = null;
+    const seenCursors = new Set<string>();
     for (let page = 0; page < MOEMAIL_MAX_LIST_PAGES; page += 1) {
       const url: string = cursor
         ? `${base}/api/emails?cursor=${encodeURIComponent(cursor)}`
@@ -245,7 +246,11 @@ export class MoeMailAdapter implements UpstreamAdapter {
       const data: MoeMailboxListPage = await upstreamGetJson<MoeMailboxListPage>(
         this.deps, cfg, url, { "X-API-Key": apiKey }, "/api/emails",
       );
-      const hit = (data.emails ?? []).find(
+      if (!data || !Array.isArray(data.emails)
+        || (data.nextCursor != null && typeof data.nextCursor !== "string")) {
+        throw new UpstreamError("UNAVAILABLE", cfg.id, { message: "上游邮箱列表格式无效，无法确认邮箱归属" });
+      }
+      const hit = data.emails.find(
         (e: { id?: unknown; address?: unknown; expiresAt?: unknown }) =>
           String(e?.address ?? "").trim().toLowerCase() === normalized,
       );
@@ -260,6 +265,16 @@ export class MoeMailAdapter implements UpstreamAdapter {
       }
       cursor = typeof data.nextCursor === "string" && data.nextCursor ? data.nextCursor : null;
       if (!cursor) break;
+      if (seenCursors.has(cursor)) {
+        throw new UpstreamError("UNAVAILABLE", cfg.id, { message: "上游邮箱列表游标重复，查询未完成，无法确认邮箱归属" });
+      }
+      seenCursors.add(cursor);
+    }
+    if (cursor) {
+      throw new UpstreamError("UNAVAILABLE", cfg.id, {
+        message: `上游邮箱列表达到 ${MOEMAIL_MAX_LIST_PAGES} 页扫描上限，尚未确认 ${normalized} 是否存在`,
+        retryable: true,
+      });
     }
     throw new UpstreamError("NOT_FOUND", cfg.id, {
       // 上游列表按 expiresAt > now 过滤，已过期的邮箱查不到——提示里点明，
