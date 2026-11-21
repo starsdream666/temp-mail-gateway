@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Globe,
   RefreshCw,
@@ -40,8 +40,20 @@ export const Domains: React.FC = () => {
   const [domains, setDomains] = useState<AdminDomainInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [togglingDomain, setTogglingDomain] = useState<string | null>(null);
-  const [batchChannelId, setBatchChannelId] = useState<string | null>(null);
+  const [pendingChannels, setPendingChannels] = useState<Set<string>>(() => new Set());
+  const pendingChannelsRef = useRef(new Set<string>());
+
+  // 同一渠道的单条/批量操作互斥；不同渠道仍可独立操作。
+  const beginUpdate = (id: string) => {
+    if (pendingChannelsRef.current.has(id)) return false;
+    pendingChannelsRef.current.add(id);
+    setPendingChannels(new Set(pendingChannelsRef.current));
+    return true;
+  };
+  const finishUpdate = (id: string) => {
+    pendingChannelsRef.current.delete(id);
+    setPendingChannels(new Set(pendingChannelsRef.current));
+  };
 
   // 复合 key = `${upstreamId}:${domain}`：同一域名可登记在多个渠道（复合主键），
   // 单用 domain 会把其他渠道的同名行一起改掉/一起打上 loading
@@ -62,6 +74,7 @@ export const Domains: React.FC = () => {
   const toast = useToast();
 
   const loadDomains = useCallback(async () => {
+    if (pendingChannelsRef.current.size > 0) return;
     try {
       setLoading(true);
       setError(null);
@@ -94,6 +107,17 @@ export const Domains: React.FC = () => {
     const map = new Map<string, string>();
     for (const d of domains) map.set(d.upstreamId, d.upstreamName);
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [domains]);
+
+  const channelCounts = useMemo(() => {
+    const counts = new Map<string, { total: number; enabled: number }>();
+    for (const domain of domains) {
+      const count = counts.get(domain.upstreamId) ?? { total: 0, enabled: 0 };
+      count.total++;
+      if (domain.enabled) count.enabled++;
+      counts.set(domain.upstreamId, count);
+    }
+    return counts;
   }, [domains]);
 
   const filtered = useMemo(() => {
@@ -154,7 +178,7 @@ export const Domains: React.FC = () => {
 
   // 开关域名调用（乐观更新，失败回滚；按复合 key 精确定位某渠道的域名行）
   const handleToggle = async (item: AdminDomainInfo, next: boolean) => {
-    setTogglingDomain(domainKey(item));
+    if (!beginUpdate(item.upstreamId)) return;
     const apply = (enabled: boolean) =>
       setDomains((prev) => prev.map((d) => (domainKey(d) === domainKey(item) ? { ...d, enabled } : d)));
     apply(next);
@@ -169,17 +193,19 @@ export const Domains: React.FC = () => {
       );
       toast.success(`域名 ${item.domain} 已${next ? '开启' : '停止'}调用`);
     } catch (err) {
-      apply(!next); // 回滚
+      apply(item.enabled);
       toast.error((err as Error).message || '更新域名状态失败');
     } finally {
-      setTogglingDomain(null);
+      finishUpdate(item.upstreamId);
     }
   };
 
   // 批量开关某渠道（上游实例）的全部域名
   const handleToggleChannel = async (group: ChannelGroup, next: boolean) => {
-    setBatchChannelId(group.upstreamId);
-    const prev = domains; // 快照：失败时重新拉取（本地反推会抹平渠道原本的混合状态）
+    if (!beginUpdate(group.upstreamId)) return;
+    const previous = new Map(domains
+      .filter((d) => d.upstreamId === group.upstreamId)
+      .map((d) => [d.domain, d.enabled]));
     const apply = (enabled: boolean) =>
       setDomains((prevList) =>
         prevList.map((d) => (d.upstreamId === group.upstreamId ? { ...d, enabled } : d)),
@@ -189,11 +215,15 @@ export const Domains: React.FC = () => {
       const affected = await setChannelDomainsEnabled(group.upstreamId, next);
       toast.success(`渠道「${group.upstreamName}」已${next ? '启用' : '停用'} ${affected} 个域名的调用`);
     } catch (err) {
-      // 失败后重新拉取服务端真值，避免本地反推抹平渠道原本的混合启用状态
-      setDomains(prev);
+      // 只恢复本渠道的启停状态，保留其他渠道已成功或仍在执行的更新。
+      setDomains((current) => current.map((d) =>
+        d.upstreamId === group.upstreamId && previous.has(d.domain)
+          ? { ...d, enabled: previous.get(d.domain)! }
+          : d,
+      ));
       toast.error((err as Error).message || '批量更新渠道域名失败');
     } finally {
-      setBatchChannelId(null);
+      finishUpdate(group.upstreamId);
     }
   };
 
@@ -216,8 +246,9 @@ export const Domains: React.FC = () => {
         <button
           type="button"
           onClick={loadDomains}
+          disabled={loading || pendingChannels.size > 0}
           title="刷新数据"
-          className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl shadow-sm transition-colors self-start sm:self-auto"
+          className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl shadow-sm transition-colors self-start sm:self-auto disabled:opacity-40"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -354,7 +385,8 @@ export const Domains: React.FC = () => {
             const isExpanded = !!expandedGroups[g.upstreamId];
             const shown = isExpanded ? g.domains : g.domains.slice(0, RENDER_CAP);
             const hiddenCount = g.domains.length - shown.length;
-            const enabledCount = g.domains.filter((d) => d.enabled).length;
+            const { enabled: enabledCount, total: channelTotal } = channelCounts.get(g.upstreamId)!;
+            const updating = pendingChannels.has(g.upstreamId);
             return (
               <div key={g.upstreamId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 {/* 渠道组头 */}
@@ -385,8 +417,9 @@ export const Domains: React.FC = () => {
                   {!g.upstreamEnabled && <Badge variant="slate">上游已停用</Badge>}
                   <span className="ml-auto text-xs text-slate-500 font-mono">
                     <span className="text-emerald-600 font-semibold">{enabledCount}</span> 启用 /{' '}
-                    <span className="text-amber-600 font-semibold">{g.domains.length - enabledCount}</span> 停用 · 共{' '}
-                    {g.domains.length} 个
+                    <span className="text-amber-600 font-semibold">{channelTotal - enabledCount}</span> 停用 · 共{' '}
+                    {channelTotal} 个
+                    {hasFilter && <span>（筛选命中 {g.domains.length} 个）</span>}
                   </span>
                 </button>
 
@@ -396,7 +429,7 @@ export const Domains: React.FC = () => {
                   <span className="text-slate-400">渠道批量操作：</span>
                   <button
                     type="button"
-                    disabled={batchChannelId === g.upstreamId || enabledCount === 0}
+                    disabled={updating || enabledCount === 0}
                     onClick={() => handleToggleChannel(g, false)}
                     title="停用该渠道全部域名（含未在筛选结果中的域名）"
                     className="px-2 py-1 font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors disabled:opacity-40"
@@ -405,7 +438,7 @@ export const Domains: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    disabled={batchChannelId === g.upstreamId || enabledCount === g.domains.length}
+                    disabled={updating || enabledCount === channelTotal}
                     onClick={() => handleToggleChannel(g, true)}
                     title="启用该渠道全部域名（含未在筛选结果中的域名）"
                     className="px-2 py-1 font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-40"
@@ -418,7 +451,7 @@ export const Domains: React.FC = () => {
                   </span>
                   {hasFilter && (
                     <span className="text-amber-600 font-medium">
-                      当前有筛选：批量操作覆盖该渠道全部 {g.domains.length} 个域名
+                      当前有筛选：批量操作覆盖该渠道全部 {channelTotal} 个域名
                     </span>
                   )}
                 </div>
@@ -463,7 +496,7 @@ export const Domains: React.FC = () => {
                               <div className="flex items-center gap-2">
                                 <Toggle
                                   checked={d.enabled}
-                                  disabled={togglingDomain === domainKey(d)}
+                                  disabled={updating}
                                   onChange={(next) => handleToggle(d, next)}
                                   title={d.enabled ? '点击停用该域名的调用' : '点击开启该域名的调用'}
                                 />

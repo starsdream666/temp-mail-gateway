@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -71,9 +71,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const error = useCallback((msg: string, dur?: number) => showToast('error', msg, dur ?? 5000), [showToast]);
   const warning = useCallback((msg: string, dur?: number) => showToast('warning', msg, dur ?? 4500), [showToast]);
   const info = useCallback((msg: string, dur?: number) => showToast('info', msg, dur), [showToast]);
+  // 提示出现/消失不改变调用接口，避免消费者的请求 effect 被重新触发。
+  const value = useMemo(() => ({ showToast, success, error, warning, info }), [showToast, success, error, warning, info]);
 
   return (
-    <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0">
         {toasts.map((toast) => (
