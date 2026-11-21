@@ -6,11 +6,11 @@
 
 ## 1. 架构总览与设计原则
 
-新增 `/settings` 全局设置页（`src/pages/Settings.tsx`），由 `ProtectedRoute` 保护，入口在侧栏「全局设置」。全局监控 / Key 默认限额与密码修改使用独立表单，保存按钮有未修改 / 提交中状态，加载失败可重试。仅提交改动字段；密码变更需当前密码和两次新密码校验，成功后清除登录态并跳回登录页。
+后台路由由 `src/App.tsx` 管理，当前包含上游、域名、API Key、邮箱、状态监控、API 文档和全局设置七个业务页面，均受 `ProtectedRoute` 保护；登录页单独公开。全局设置页（`src/pages/Settings.tsx`）管理清理、监控、Key 默认限额和管理员密码；密码变更需当前密码及新密码确认，成功后要求重新登录。
 
 认证继续使用密码登录，不引入账号字段。设置调用集中在 `api/client.ts` 的 `getGlobalSettings` / `updateGlobalSettings`，类型为 `GlobalSettings` / `UpdateGlobalSettingsPayload`；服务端 `GET/PATCH /admin/settings` 的响应不包含密码摘要。
 
-Key 表单的 `KeyRateLimitField` 支持建箱次数与并发两种类型，均可继承系统默认、使用自定义上限或不限制。状态监控页的“跟随全局默认”直接使用服务端生效间隔，全局暂停时显示暂停提示。
+Key 表单的 `KeyRateLimitField` 支持建箱次数与并发两种类型，均可继承系统默认、使用自定义上限或不限制。状态监控页可配置渠道测活与域名自动同步。`ThemeContext` 提供多套主题和动效速度偏好，并保存在浏览器本地存储中。
 
 Temp Mail Gateway 管理后台是一个纯净、轻量且具备高度健壮性的现代化 SPA，设计遵循以下核心原则：
 
@@ -28,7 +28,7 @@ Temp Mail Gateway 管理后台是一个纯净、轻量且具备高度健壮性�
    - 写操作按钮全链路防重复提交（在 pending 状态下禁用并展示动画）。
    - 破坏性/不可逆操作（删除上游、吊销 API Key）具备强制二次确认（`ConfirmDialog`），标注醒目红色后果。
 5. **同源开发，跨域就绪**：
-   - 本地开发通过 Vite Proxy 将 `/admin` 与 `/api` 代理到后端网关（`http://localhost:8787`），避免跨域与 Cookie 丢弃问题。
+   - 本地开发通过 Vite Proxy 将 `/admin`、`/api`、`/v1` 与 `/upstream` 路径代理到后端网关（`http://localhost:8787`），避免跨域与 Cookie 丢弃问题；匹配按路径段进行，不会代理 `/api-docs` 等前端路由。
    - 请求客户端内置 `credentials: 'include'`，原生支持基于 `ADMIN_CORS_ORIGIN` 的独立域名跨域部署。
 
 ---
@@ -41,33 +41,23 @@ frontend/
 ├── package.json                 # 依赖声明与 npm scripts
 ├── vite.config.ts               # Vite 构建、代理与优化配置
 ├── tsconfig.json                # TypeScript 严格模式配置
-├── tailwind.config.js           # Tailwind CSS 配色与排版定制
+├── tailwind.config.js           # Tailwind CSS 配置
 ├── src/
 │   ├── api/
-│   │   └── client.ts            # 核心网络层：apiFetch 与全部管理端 API 封装
+│   │   ├── client.ts            # apiFetch 与管理端 API 封装
+│   │   └── url.ts               # 同源、独立后端和路径前缀 API 地址解析
 │   ├── types/
 │   │   └── index.ts             # 领域实体、请求体、响应体与错误类声明
 │   ├── context/
-│   │   └── AuthContext.tsx      # 会话认证上下文（登录态探测、401 失效通知）
+│   │   ├── AuthContext.tsx      # 会话认证上下文（登录态探测、401 失效通知）
+│   │   └── ThemeContext.tsx     # 主题和动效速度偏好
 │   ├── components/
-│   │   ├── Layout.tsx           # 后台主布局（响应式侧边栏、移动端汉堡抽屉）
-│   │   ├── ProtectedRoute.tsx   # 路由鉴权守卫（未登录自动重定向至 /login）
-│   │   ├── Toast.tsx            # 全局 Toast 通知上下文与容器
-│   │   ├── Modal.tsx            # 通用居中对话框（支持 ESC 快捷退出、遮罩层）
-│   │   ├── ConfirmDialog.tsx    # 危险操作二次确认弹窗
-│   │   ├── UpstreamFormModal.tsx# 上游新建/编辑弹窗（集成 Settings JSON 校验）
-│   │   ├── CopyButton.tsx       # 剪贴板快速复制按钮（绿色对勾反馈）
-│   │   ├── Badge.tsx            # 多色语义化徽章（dot 状态指示器）
-│   │   ├── Loading.tsx          # 列表表格骨架屏与居中 Spinner
-│   │   ├── EmptyState.tsx       # 引导性空状态组件
-│   │   └── ErrorState.tsx       # 错误提示卡片与重试触发器
-│   ├── pages/
-│   │   ├── Login.tsx            # 管理员登录页（401 内联密码错误展示）
-│   │   ├── Upstreams.tsx        # 上游管理页面（列表、状态切换、同步、删除）
-│   │   ├── ApiKeys.tsx          # API Key 管理（签发一次性明文展示、吊销）
-│   │   └── Mailboxes.tsx        # 临时邮箱概览（上游筛选、翻页分页、地址复制）
-│   ├── utils/
-│   │   └── format.ts            # 本地时间格式化（ISO 8601 -> YYYY-MM-DD HH:mm）
+│   │   ├── Layout.tsx、PageTransition.tsx、ThemeSwitcher.tsx、ThemeBackdrop.tsx
+│   │   ├── UpstreamFormModal.tsx、DomainPicker.tsx、ChannelPicker.tsx
+│   │   └── 通用控件：Modal、ConfirmDialog、Toggle、Toast、Loading、ErrorState 等
+│   ├── pages/                    # Login、Upstreams、Domains、ApiKeys、Mailboxes、Health、ApiDocs、Settings
+│   ├── styles/themes.css         # 主题变量与主题样式
+│   ├── utils/                    # 时间、域名、上游和间隔格式化工具
 │   ├── App.tsx                  # 顶级路由与 Context 树组装
 │   ├── main.tsx                 # DOM 渲染挂载点
 │   └── index.css                # Tailwind 基础与组件层样式
@@ -121,9 +111,9 @@ frontend/
 ```json
 {
   "error": {
-    "code": "UPSTREAM_IN_USE",
-    "message": "该上游名下仍有 3 个活跃邮箱，请先清理",
-    "details": "..."
+    "code": "CONFLICT",
+    "message": "该地址已在网关注册表中",
+    "details": {}
   }
 }
 ```
@@ -137,8 +127,8 @@ frontend/
 | **登录校验失败** | POST /admin/session 返回 401 | 表单输入框下方直接内联红字提示「密码错误」，不使用全局弹窗，焦点保持在输入框。 |
 | **上游启用切换** | 点击 Switch 开关 | 即时触发 `PUT /admin/upstreams/:id { enabled: !curr }`，采用乐观更新，失败时自动回滚并 Toast 报错。 |
 | **同步域名** | 点击「同步域名」按钮 | 按钮进入旋转 loading 态；成功后弹出模态框完整呈现 `added`（绿色 tag）、`removed`（红色 tag）、`total`，若存在 `warning` 以警示条呈现。 |
-| **删除上游受阻** | DELETE /admin/upstreams/:id 返回 409 | 捕获 409 错误信封，Toast 呈现「该上游名下仍有 N 个邮箱，请先清理」。 |
-| **API Key 签发** | POST /admin/keys 返回 201 | 弹出专属模态框展示明文 Key。配置一键复制按钮与强制红色/黄色警告条，说明关闭后不再展示。 |
+| **删除上游受阻** | DELETE /admin/upstreams/:id 返回 409 | 捕获 409 错误信封并将后端消息通过 Toast 呈现。 |
+| **API Key 签发/取回** | POST /admin/keys 或 POST /admin/keys/:id/reveal | 签发后展示完整 Key；新 Key 的明文加密保存，可从列表重新取回。旧版本只保存哈希的 Key 无法取回明文。 |
 | **API Key 吊销** | 点击「删除」按钮 | 弹出 `ConfirmDialog`，红字警告不可逆；确认后调用 `POST /admin/keys/:id/revoke`，**硬删除**该 key（立即失效并从列表移除，不留置灰占位）。 |
 | **邮箱列表查看** | 查看邮箱地址 | 采用等宽字体展示，紧跟快速复制小图标，点击后变为绿色对勾「已复制」。 |
 
@@ -151,7 +141,7 @@ frontend/
 ```typescript
 // 适配器元信息
 export interface AdapterTypeInfo {
-  type: string;                  // 适配器标识，如 'dummy', 'mailtm'
+  type: string;                  // 适配器标识，如 'cf-temp-email', 'moemail'
   displayName: string;           // 页面显示的中文名，如 'Dummy（内置假上游）'
   description: string;           // 适配器特性说明
   capabilities: {
@@ -199,11 +189,15 @@ export interface ApiKeyInfo {
   enabled: boolean;              // 是否有效（吊销是硬删除，列表不留"已吊销"占位）
   domains: string[] | null;      // 域名白名单（小写）；null = 不限制
   channels: string[] | null;     // 渠道白名单（上游实例 id）；null = 不限渠道；与域名白名单取交集
+  mailboxesPerHour: number | null; // 每小时建箱上限；null = 系统默认，0 = 不限
+  effectiveMailboxesPerHour: number; // 当前生效的每小时建箱上限；0 = 不限
+  maxConcurrentRequests: number | null; // 并发上限；null = 系统默认，0 = 不限
+  effectiveMaxConcurrentRequests: number; // 当前生效的并发上限；0 = 不限
   lastUsedAt: string | null;     // 最近一次调用的时间
   createdAt: string;
 }
 
-// 签发 Key 成功返回（仅此一次包含明文 key）
+// 签发 Key 成功返回；明文加密保存，可通过管理 API 再次取回
 export interface CreatedApiKey extends ApiKeyInfo {
   key: string;                   // 完整明文密钥
 }
@@ -322,11 +316,11 @@ npm run frontend:build   # 在仓库根目录执行，产物写入 frontend/dist
 
 两条硬性约束：
 
-1. **前端路由路径不得与 API 前缀冲突**。`/v1`、`/admin`、`/api` 是后端命名空间，这些前缀下的未匹配路径**始终返回 JSON 错误信封**而非 `index.html`。因此新增前端页面时，路径不要以这三者开头（现有 `/upstreams`、`/keys`、`/mailboxes`、`/login` 均安全）。
+1. **前端路由路径不得与 API 前缀冲突**。`/v1`、`/admin`、`/api` 是后端命名空间，这些前缀下的未匹配路径**始终返回 JSON 错误信封**而非 `index.html`。因此新增前端页面时，路径不要以这三者开头（现有 `/upstreams`、`/domains`、`/keys`、`/mailboxes`、`/health`、`/api-docs`、`/settings`、`/login` 均安全）。
 2. 未执行前端构建时（`frontend/dist` 不存在），后端自动退化为纯 API 模式，根路径返回服务信息 JSON。
 
 修改路由结构后请运行前后端类型检查与 Docker 冒烟验证。
 
 ### 构建注意事项
 
-`package.json` 的 `build` 脚本前置了 `clean`（`node -e` 删除 `dist`），而非依赖 Vite 的 `emptyOutDir`——后者在 Git Bash / MSYS 环境下删除目录会静默失败并中断构建，导致 `dist` 中堆积多份旧哈希产物。请保持 `vite.config.ts` 中 `emptyOutDir: false` 与 `clean` 脚本的组合。
+`package.json` 的 `build` 脚本先运行 `scripts/clean-dist.mjs` 清理 `dist`，再执行 TypeScript 检查和 Vite 构建。清理脚本会在 Windows 文件句柄暂时占用时重试，最终失败则让构建以非零状态退出；请保持 `vite.config.ts` 中 `emptyOutDir: false` 与该清理步骤的组合。
