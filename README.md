@@ -5,7 +5,7 @@
 - 设计文档：[DESIGN.md](./DESIGN.md)
 - API 调用指南（适合 AI / 开发者读取）：[API.md](./API.md)
 - 前端架构说明：[frontend/ARCHITECTURE.md](./frontend/ARCHITECTURE.md)
-- 当前状态：**壳子 + 管理后台 SPA + 4 个真实上游适配器（cloudflare_temp_email、MoeMail、YYDS Mail、DuckMail）+ 统一 API + 原生格式透传 + 域名/渠道管控 + 每 Key 独立限流 + 健康监控（域名自动同步）+ 过期清理 + 地址纳管 + 残留可见性 + Docker `v0.2.5`**。前后端 typecheck 干净。cf 适配器已按 v1.9.0 实测修正 MIME/分页/`address_id`。
+- 当前状态：**代码版本 `0.2.6`（待发布）；Docker 当前已发布版本 `v0.2.5`**。功能包括管理后台 SPA、4 个真实上游适配器、统一 API、原生格式透传、域名/渠道管控、每 Key 独立限流、健康监控、过期清理、地址纳管与残留可见性。cf 适配器已按 v1.9.0 实测修正 MIME/分页/`address_id`。
 - 开源协议：[MIT](./LICENSE)；第三方依赖声明：[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
 
 ## 快速开始（Docker，推荐）
@@ -57,7 +57,7 @@ Docker 用户名和镜像名已写入工作流的非敏感配置。令牌仅交�
 | 触发事件 | 行为 |
 |---|---|
 | 提交至 `main` | 检查、构建并发布 `latest`、`main`、`sha-<短提交号>` |
-| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布原始标签（如 `v0.2.5`）、完整版本号（`0.2.5`）、主次版本号（`0.2`）、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
+| 推送 `v*` 版本标签 | 校验标签与 `package.json` 版本一致，发布原始标签（如 `v0.2.6`）、完整版本号（`0.2.6`）、主次版本号（`0.2`）、SHA 标签；正式版本同时更新 `latest`，预发布版本不更新 `latest` |
 | 向 `main` 提交 PR | 类型检查、构建和冒烟验证，不登录 Docker Hub、不推送镜像 |
 | Actions 页面手动运行 | 默认只验证；在 `main` 或版本标签上勾选 `publish` 后才推送 |
 

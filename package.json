@@ -1,6 +1,6 @@
 {
   "name": "temp-mail-gateway",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "临时邮箱聚合网关 — 统一 API + 上游透传，可部署到 Cloudflare Workers / Docker",
   "type": "module",
   "private": true,
@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 migrations apply DB --local",
-    "docker:build": "docker build -t starsdream666/temp-mail-gateway:v0.2.5 -t starsdream666/temp-mail-gateway:latest --build-arg HTTP_PROXY=http://host.docker.internal:7890 --build-arg HTTPS_PROXY=http://host.docker.internal:7890 .",
-    "docker:push": "docker push starsdream666/temp-mail-gateway:v0.2.5 && docker push starsdream666/temp-mail-gateway:latest",
+    "docker:build": "docker build -t starsdream666/temp-mail-gateway:v0.2.6 -t starsdream666/temp-mail-gateway:latest --build-arg HTTP_PROXY=http://host.docker.internal:7890 --build-arg HTTPS_PROXY=http://host.docker.internal:7890 .",
+    "docker:push": "docker push starsdream666/temp-mail-gateway:v0.2.6 && docker push starsdream666/temp-mail-gateway:latest",
     "deploy": "npm run frontend:build && wrangler deploy"
   },
   "dependencies": {
