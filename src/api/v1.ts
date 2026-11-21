@@ -48,8 +48,17 @@ const errResp = (description: string) => ({
   description,
 });
 
+const gatewaySecurity: Array<Record<string, string[]>> = [{ GatewayBearer: [] }, { GatewayKey: [] }];
+
 export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
   const { stores, registry, crypto, rateLimiter } = deps;
+
+  app.openAPIRegistry.registerComponent("securitySchemes", "GatewayBearer", {
+    type: "http", scheme: "bearer",
+  });
+  app.openAPIRegistry.registerComponent("securitySchemes", "GatewayKey", {
+    type: "apiKey", in: "header", name: "X-Gateway-Key",
+  });
 
   // /v1/* 全部需要网关 API key
   app.use("/v1/*", requireApiKey(stores.apiKeys));
@@ -60,6 +69,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
     createRoute({
       method: "get",
       path: "/v1/domains",
+      security: gatewaySecurity,
       tags: ["gateway"],
       summary: "列出所有可用域名（含归属上游元数据）",
       responses: {
@@ -113,6 +123,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes",
       tags: ["gateway"],
       summary: "创建邮箱（按域名路由到对应上游）",
+      security: gatewaySecurity,
       request: {
         body: { content: { "application/json": { schema: CreateMailboxBody } }, required: true },
       },
@@ -205,6 +216,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes",
       tags: ["gateway"],
       summary: "列出本 key 创建的邮箱（分页，新→旧）",
+      security: gatewaySecurity,
       description:
         "只返回调用方 key 名下的邮箱。透传自动登记的共享邮箱（无归属 key）默认不列出，需显式 includeShared=1；已过期记录默认不列出，需 includeExpired=1。",
       request: {
@@ -259,6 +271,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}",
       tags: ["gateway"],
       summary: "邮箱详情",
+      security: gatewaySecurity,
       request: { params: z.object({ id: z.string().min(1) }) },
       responses: {
         200: { content: { "application/json": { schema: z.object({ mailbox: Mailbox }) } }, description: "OK" },
@@ -281,6 +294,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}",
       tags: ["gateway"],
       summary: "删除邮箱（同时删除上游侧；?force=1 为尽力删除）",
+      security: gatewaySecurity,
       description:
         "默认严格语义：上游删除失败 → 502 且保留网关记录。?force=1 为尽力删除——仍尝试删上游，" +
         "但无论上游结果如何都删除网关记录，并在响应里如实回报 upstreamDeleted。" +
@@ -297,6 +311,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
         },
         204: { description: "已删除" },
         401: errResp("未授权"),
+        403: errResp("上游已停用"),
         404: errResp("邮箱不存在"),
         409: errResp("该上游不支持尽力删除（凭证型上游）"),
         502: errResp("上游错误"),
@@ -364,6 +379,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}/messages",
       tags: ["gateway"],
       summary: "列消息（?since=<上一页最后一条消息 id> 增量拉取）",
+      security: gatewaySecurity,
       request: {
         params: z.object({ id: z.string().min(1) }),
         query: z.object({ since: z.string().optional() }),
@@ -374,6 +390,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
           description: "OK",
         },
         401: errResp("未授权"),
+        403: errResp("上游已停用"),
         404: errResp("邮箱不存在"),
         410: errResp("邮箱已过期（上游已回收）"),
         502: errResp("上游错误"),
@@ -399,6 +416,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}/messages/{mid}",
       tags: ["gateway"],
       summary: "消息详情（text / html / 附件元数据）",
+      security: gatewaySecurity,
       request: { params: z.object({ id: z.string().min(1), mid: z.string().min(1) }) },
       responses: {
         200: {
@@ -406,6 +424,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
           description: "OK",
         },
         401: errResp("未授权"),
+        403: errResp("上游已停用"),
         404: errResp("邮箱或消息不存在"),
         410: errResp("邮箱已过期（上游已回收）"),
         502: errResp("上游错误"),
@@ -430,10 +449,12 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}/messages/{mid}",
       tags: ["gateway"],
       summary: "删除消息",
+      security: gatewaySecurity,
       request: { params: z.object({ id: z.string().min(1), mid: z.string().min(1) }) },
       responses: {
         204: { description: "已删除" },
         401: errResp("未授权"),
+        403: errResp("上游已停用"),
         404: errResp("邮箱或消息不存在"),
         410: errResp("邮箱已过期（上游已回收）"),
         501: errResp("该上游不支持删除消息"),
@@ -459,6 +480,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
       path: "/v1/mailboxes/{id}/messages/{mid}/source",
       tags: ["gateway"],
       summary: "原始报文（message/rfc822）",
+      security: gatewaySecurity,
       request: { params: z.object({ id: z.string().min(1), mid: z.string().min(1) }) },
       responses: {
         200: {
@@ -466,6 +488,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
           description: "OK",
         },
         401: errResp("未授权"),
+        403: errResp("上游已停用"),
         404: errResp("邮箱或消息不存在"),
         410: errResp("邮箱已过期（上游已回收）"),
         501: errResp("该上游不支持原始报文"),
@@ -529,6 +552,7 @@ export function registerV1Routes(app: OpenAPIHono<Env>, deps: V1Deps): void {
   async function requireUpstream(store: UpstreamStore, id: string) {
     const row = await store.get(id);
     if (!row) throw new AppError("NOT_FOUND", `上游不存在: ${id}`);
+    if (!row.enabled) throw new AppError("FORBIDDEN", "该上游已停用");
     return row;
   }
 }

@@ -9,13 +9,15 @@ import { createWebCryptoCipher } from "../src/adapters/crypto/webcrypto";
 import { runMigrations } from "../src/db/migrate-node";
 import { buildDeps } from "../src/bootstrap";
 import { createApp } from "../src/core/app";
+import { DummyUpstreamAdapter } from "../src/adapters/upstreams/dummy";
+import { HTTPException } from "hono/http-exception";
 import worker from "../src/entries/worker";
 import { changedUpstreamFields } from "../frontend/src/utils/upstream";
 import { resolveApiBaseUrl } from "../frontend/src/api/url";
 import viteConfig from "../frontend/vite.config";
 import { createServer as createViteServer } from "../frontend/node_modules/vite/dist/node/index.js";
 
-async function fixture() {
+async function fixture(configure?: (app: ReturnType<typeof createApp>) => void) {
   const sqlite = new Database(":memory:");
   runMigrations(sqlite, resolve("migrations"));
   const deps = buildDeps({
@@ -24,6 +26,7 @@ async function fixture() {
     config: { masterKey: "config-test-master", adminPassword: "config-test-password", maxConcurrentRequestsPerKey: 1 },
   });
   const app = createApp(deps);
+  configure?.(app);
   const login = await app.request("/admin/session", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password: deps.config.adminPassword }),
@@ -37,8 +40,109 @@ async function fixture() {
   const keyResponse = await admin("/admin/keys", "POST", { name: "config-test" });
   assert.equal(keyResponse.status, 201);
   const { key } = await keyResponse.json() as { key: { key: string } };
-  return { sqlite, deps, app, admin, auth: { Authorization: `Bearer ${key.key}` } };
+  return { sqlite, deps, app, admin, cookie, auth: { Authorization: `Bearer ${key.key}` } };
 }
+
+test("disabled upstreams block all v1 upstream operations without deleting local records", async () => {
+  const f = await fixture();
+  const adapter = new DummyUpstreamAdapter();
+  f.deps.registry.register(adapter, { displayName: "Dummy", description: "test" });
+  try {
+    const created = await f.admin("/admin/upstreams", "POST", {
+      name: "disabled-test", type: "dummy", baseUrl: "memory://test", settings: { domains: ["audit.test"] },
+    });
+    const { upstream } = await created.json() as any;
+    const response = await f.app.request("/v1/mailboxes", {
+      method: "POST", headers: { ...f.auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "audit.test", localPart: "reader" }),
+    });
+    assert.equal(response.status, 201);
+    const { mailbox } = await response.json() as any;
+    await (await f.admin(`/admin/upstreams/${upstream.id}`, "PUT", { enabled: false })).text();
+    let upstreamCalls = 0;
+    for (const method of ["listMessages", "getMessage", "getSource", "deleteMessage", "deleteMailbox"] as const) {
+      const original = adapter[method].bind(adapter);
+      (adapter as any)[method] = async (...args: any[]) => { upstreamCalls++; return (original as any)(...args); };
+    }
+    for (const [suffix, method] of [
+      ["/messages", "GET"], ["/messages/message", "GET"], ["/messages/message/source", "GET"],
+      ["/messages/message", "DELETE"], ["", "DELETE"], ["?force=1", "DELETE"],
+    ]) {
+      const res = await f.app.request(`/v1/mailboxes/${mailbox.id}${suffix}`, { method, headers: f.auth });
+      assert.equal(res.status, 403, `${method} ${suffix}`);
+      assert.equal((await res.json() as any).error.code, "FORBIDDEN");
+    }
+    assert.equal(upstreamCalls, 0);
+    const detail = await f.app.request(`/v1/mailboxes/${mailbox.id}`, { headers: f.auth });
+    assert.equal(detail.status, 200, "local metadata remains available");
+    await detail.text();
+    assert(await f.deps.stores.mailboxes.get(mailbox.id));
+    await (await f.admin(`/admin/upstreams/${upstream.id}`, "PUT", { enabled: true })).text();
+    await (await f.admin(`/admin/upstreams/${upstream.id}/domains/audit.test`, "PUT", { enabled: false })).text();
+    const resumed = await f.app.request(`/v1/mailboxes/${mailbox.id}/messages`, { headers: f.auth });
+    assert.equal(resumed.status, 200, "a disabled domain only blocks creation, not existing mail");
+    await resumed.text();
+    assert.equal(upstreamCalls, 1);
+  } finally { f.sqlite.close(); }
+});
+
+test("malformed JSON remains a 400 envelope while unexpected errors stay redacted", async (t) => {
+  const errorLog = t.mock.method(console, "error", () => {});
+  const f = await fixture((app) => {
+    app.get("/review-framework-error", () => { throw new HTTPException(403, { message: "Access denied" }); });
+    app.get("/review-internal", () => { throw new Error("private database credential"); });
+    app.get("/review-framework-internal", () => { throw new HTTPException(500, { message: "private database credential" }); });
+  });
+  try {
+    for (const path of ["/admin/session", "/admin/keys", "/v1/mailboxes"]) {
+      const res = await f.app.request(path, {
+        method: "POST", headers: { ...f.auth, Cookie: f.cookie, "Content-Type": "application/json" }, body: "{",
+      });
+      assert.equal(res.status, 400, path);
+      assert.equal((await res.json() as any).error.code, "VALIDATION_ERROR");
+    }
+    const denied = await f.app.request("/review-framework-error");
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.json() as any).error.message, "Access denied");
+    for (const path of ["/review-internal", "/review-framework-internal"]) {
+      const res = await f.app.request(path);
+      assert.equal(res.status, 500);
+      const body = await res.text();
+      assert(!body.includes("private database credential"));
+      assert.equal(JSON.parse(body).error.code, "INTERNAL");
+    }
+    assert.equal(errorLog.mock.callCount(), 2, "only server errors should be logged as unhandled");
+  } finally { f.sqlite.close(); }
+});
+
+test("OpenAPI declares usable bearer and explicit gateway-key authentication for every v1 route", async () => {
+  const f = await fixture();
+  try {
+    const doc = await (await f.app.request("/api/doc")).json() as any;
+    assert.equal(doc.components.securitySchemes.GatewayBearer.type, "http");
+    assert.equal(doc.components.securitySchemes.GatewayBearer.scheme, "bearer");
+    assert.deepEqual(doc.components.securitySchemes.GatewayKey, {
+      type: "apiKey", in: "header", name: "X-Gateway-Key",
+    });
+    let operations = 0;
+    for (const [path, methods] of Object.entries(doc.paths) as any) {
+      if (!path.startsWith("/v1/")) continue;
+      for (const operation of Object.values(methods) as any) {
+        assert.deepEqual(operation.security, [{ GatewayBearer: [] }, { GatewayKey: [] }], path);
+        operations++;
+      }
+    }
+    assert.equal(operations, 9);
+    assert.equal(doc.security, undefined, "public and cookie-auth routes must not inherit API-key auth");
+    assert.equal(doc.paths["/admin/session"].post.security, undefined);
+    const rawKey = f.auth.Authorization.slice("Bearer ".length);
+    for (const headers of [f.auth, { "X-Gateway-Key": rawKey }]) {
+      const res = await f.app.request("/v1/domains", { headers });
+      assert.equal(res.status, 200);
+      await res.text();
+    }
+  } finally { f.sqlite.close(); }
+});
 
 test("HEAD success and errors release the sole concurrency slot without reading a body", async () => {
   const f = await fixture();

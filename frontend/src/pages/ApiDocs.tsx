@@ -314,7 +314,7 @@ export const ApiDocs: React.FC = () => {
 }`} label="错误信封" />
           <div className="grid grid-cols-2 gap-2 text-sm">
             {[
-              ['400', '参数或路由错误'], ['401', '凭证缺失或无效'], ['403', 'Key 白名单限制'],
+              ['400', '请求格式、参数或路由错误'], ['401', '凭证缺失或无效'], ['403', '上游/域名停用或 Key 白名单限制'],
               ['404', '资源不存在'], ['409', '地址冲突/操作受限'], ['410', '邮箱已过期'],
               ['429', '创建速率超限'], ['501', '上游能力不支持'], ['502', '上游服务错误'],
             ].map(([code, text]) => <div key={code} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="font-mono font-bold text-slate-900">{code}</span><div className="mt-1 text-xs text-slate-500">{text}</div></div>)}
